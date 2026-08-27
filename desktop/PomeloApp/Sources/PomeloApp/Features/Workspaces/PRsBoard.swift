@@ -102,7 +102,7 @@ struct PRCommit: Decodable, Identifiable, Equatable {
 
 struct PRReviewComment: Decodable, Identifiable, Equatable {
     var user: String?; var avatarUrl: String?; var body: String?; var path: String?; var line: Int?
-    var diffHunk: String?; var createdAt: String?; var reviewId: Int?
+    var diffHunk: String?; var hunkLines: [DiffLine]?; var createdAt: String?; var reviewId: Int?
     var id: String { (user ?? "") + (path ?? "") + String(line ?? 0) + String((body ?? "").prefix(12)) }
 }
 
@@ -744,9 +744,9 @@ struct PRDetail: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 7)
             .background(Theme.panel3)
-            if let hunk = rc.diffHunk, !hunk.isEmpty {
+            if let lines = rc.hunkLines, !lines.isEmpty {
                 Divider().overlay(Theme.borderSoft)
-                hunkSnippet(hunk)
+                hunkSnippet(lines)
             }
             Divider().overlay(Theme.borderSoft)
             VStack(alignment: .leading, spacing: 6) {
@@ -786,12 +786,13 @@ struct PRDetail: View {
         }.buttonStyle(.plain)
     }
 
-    private func hunkSnippet(_ hunk: String) -> some View {
+    private func hunkSnippet(_ lines: [DiffLine]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(ReviewHunk.lines(hunk)) { l in
+            ForEach(lines.suffix(6)) { l in
                 let tint: Color? = l.kind == .add ? Theme.ok : l.kind == .del ? Theme.danger : nil
+                let num = l.kind == .del ? l.oldN : l.newN
                 HStack(spacing: 0) {
-                    Text(l.number.map(String.init) ?? "").font(Theme.mono(10)).foregroundStyle(Theme.dim)
+                    Text(num.map(String.init) ?? "").font(Theme.mono(10)).foregroundStyle(Theme.dim)
                         .frame(width: 36, alignment: .trailing)
                     Text(l.kind == .add ? "+" : l.kind == .del ? "-" : " ").font(Theme.mono(10.5, .bold))
                         .foregroundStyle(tint ?? Theme.dim).frame(width: 16)

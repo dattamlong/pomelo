@@ -1,8 +1,8 @@
 import SwiftUI
 
 
-struct DiffLine: Identifiable, Sendable, Decodable {
-    enum Kind: String, Sendable, Decodable { case context, add, del, hunk }
+struct DiffLine: Identifiable, Sendable, Decodable, Equatable {
+    enum Kind: String, Sendable, Decodable, Equatable { case context, add, del, hunk }
     let id: Int
     let kind: Kind
     let oldN: Int?
