@@ -124,6 +124,7 @@ func (s *Feature) PRDetail(branch, repo string, isMain bool) []byte {
         labels(first: 20) { nodes { name color } }
         reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login } } } }
         comments(first: 50) { nodes { author { login } body createdAt } }
+        reviews(first: 50) { nodes { databaseId state body submittedAt author { login } } }
       } } } }`, owner, name, head, prNodeFields)
 		out, err := gqlQuery(context.Background(), q)
 		var r struct {
@@ -192,6 +193,7 @@ func (s *Feature) PRComments(branch, repo string, isMain bool) []byte {
 		OriginalLine *int                   `json:"original_line"`
 		DiffHunk     string                 `json:"diff_hunk"`
 		CreatedAt    string                 `json:"created_at"`
+		ReviewID     *int64                 `json:"pull_request_review_id"`
 	}
 	if json.Unmarshal(raw, &apiComments) != nil {
 		return empty
@@ -203,6 +205,7 @@ func (s *Feature) PRComments(branch, repo string, isMain bool) []byte {
 		Line      *int   `json:"line"`
 		DiffHunk  string `json:"diffHunk"`
 		CreatedAt string `json:"createdAt"`
+		ReviewID  *int64 `json:"reviewId"`
 	}
 	out := make([]outComment, 0, len(apiComments))
 	for _, c := range apiComments {
@@ -210,7 +213,7 @@ func (s *Feature) PRComments(branch, repo string, isMain bool) []byte {
 		if line == nil {
 			line = c.OriginalLine
 		}
-		out = append(out, outComment{User: c.User.Login, Body: c.Body, Path: c.Path, Line: line, DiffHunk: c.DiffHunk, CreatedAt: c.CreatedAt})
+		out = append(out, outComment{User: c.User.Login, Body: c.Body, Path: c.Path, Line: line, DiffHunk: c.DiffHunk, CreatedAt: c.CreatedAt, ReviewID: c.ReviewID})
 	}
 	b, _ := json.Marshal(map[string]any{"comments": out})
 	return b

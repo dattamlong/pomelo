@@ -209,6 +209,17 @@ type gqlPR struct {
 			} `json:"author"`
 		} `json:"nodes"`
 	}
+	Reviews struct {
+		Nodes []struct {
+			DatabaseID  int64  `json:"databaseId"`
+			State       string `json:"state"`
+			Body        string `json:"body"`
+			SubmittedAt string `json:"submittedAt"`
+			Author      *struct {
+				Login string `json:"login"`
+			} `json:"author"`
+		} `json:"nodes"`
+	} `json:"reviews"`
 	Commits struct {
 		Nodes []struct {
 			Commit struct {
@@ -264,6 +275,13 @@ type ghReview struct {
 	State       string   `json:"state"`
 	SubmittedAt string   `json:"submittedAt,omitempty"`
 }
+type ghReviewEntry struct {
+	ReviewID    int64    `json:"reviewId"`
+	Author      *ghActor `json:"author,omitempty"`
+	State       string   `json:"state"`
+	Body        string   `json:"body,omitempty"`
+	SubmittedAt string   `json:"submittedAt,omitempty"`
+}
 type ghCheck struct {
 	Name         string `json:"name,omitempty"`
 	Status       string `json:"status,omitempty"`
@@ -288,28 +306,29 @@ type ghComment struct {
 	CreatedAt string   `json:"createdAt,omitempty"`
 }
 type ghPR struct {
-	Number            int           `json:"number"`
-	Title             string        `json:"title"`
-	State             string        `json:"state"`
-	URL               string        `json:"url"`
-	IsDraft           bool          `json:"isDraft"`
-	Mergeable         string        `json:"mergeable"`
-	MergeStateStatus  string        `json:"mergeStateStatus"`
-	HeadRefName       string        `json:"headRefName"`
-	BaseRefName       string        `json:"baseRefName"`
-	Author            *ghActor      `json:"author"`
-	Reviews           []ghReview    `json:"reviews"`
-	ReviewDecision    string        `json:"reviewDecision"`
-	StatusCheckRollup []ghCheck     `json:"statusCheckRollup"`
-	Additions         int           `json:"additions"`
-	Deletions         int           `json:"deletions"`
-	ChangedFiles      int           `json:"changedFiles"`
-	CreatedAt         string        `json:"createdAt"`
-	UpdatedAt         string        `json:"updatedAt"`
-	Body              string        `json:"body,omitempty"`
-	Labels            []ghLabel     `json:"labels,omitempty"`
-	ReviewRequests    []ghReviewReq `json:"reviewRequests,omitempty"`
-	Comments          []ghComment   `json:"comments,omitempty"`
+	Number            int             `json:"number"`
+	Title             string          `json:"title"`
+	State             string          `json:"state"`
+	URL               string          `json:"url"`
+	IsDraft           bool            `json:"isDraft"`
+	Mergeable         string          `json:"mergeable"`
+	MergeStateStatus  string          `json:"mergeStateStatus"`
+	HeadRefName       string          `json:"headRefName"`
+	BaseRefName       string          `json:"baseRefName"`
+	Author            *ghActor        `json:"author"`
+	Reviews           []ghReview      `json:"reviews"`
+	ReviewDecision    string          `json:"reviewDecision"`
+	StatusCheckRollup []ghCheck       `json:"statusCheckRollup"`
+	Additions         int             `json:"additions"`
+	Deletions         int             `json:"deletions"`
+	ChangedFiles      int             `json:"changedFiles"`
+	CreatedAt         string          `json:"createdAt"`
+	UpdatedAt         string          `json:"updatedAt"`
+	Body              string          `json:"body,omitempty"`
+	Labels            []ghLabel       `json:"labels,omitempty"`
+	ReviewRequests    []ghReviewReq   `json:"reviewRequests,omitempty"`
+	Comments          []ghComment     `json:"comments,omitempty"`
+	ReviewLog         []ghReviewEntry `json:"reviewLog,omitempty"`
 
 	// Semantic tokens the core derives (ADR 0001) so the UI only maps token -> colour.
 	// Always emitted (no omitempty): the Swift decoder needs the keys present.
@@ -339,6 +358,13 @@ func (p gqlPR) toGH() ghPR {
 	}
 	if p.Author != nil {
 		out.Author = &ghActor{Login: p.Author.Login}
+	}
+	for _, rv := range p.Reviews.Nodes {
+		r := ghReviewEntry{ReviewID: rv.DatabaseID, State: rv.State, Body: rv.Body, SubmittedAt: rv.SubmittedAt}
+		if rv.Author != nil {
+			r.Author = &ghActor{Login: rv.Author.Login}
+		}
+		out.ReviewLog = append(out.ReviewLog, r)
 	}
 	for _, rv := range p.LatestReviews.Nodes {
 		r := ghReview{State: rv.State, SubmittedAt: rv.SubmittedAt}
