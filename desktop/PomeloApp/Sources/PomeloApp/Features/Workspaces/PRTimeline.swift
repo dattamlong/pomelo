@@ -9,6 +9,7 @@ struct PRTimelineItem: Identifiable, Equatable {
     }
     let id: String
     let author: String?
+    var avatar: String? = nil
     let body: String
     let at: String
     let kind: Kind
@@ -20,7 +21,7 @@ enum PRTimeline {
     static func build(pr: PRInfo, reviewComments: [PRReviewComment]) -> [PRTimelineItem] {
         var out: [PRTimelineItem] = []
         if let b = pr.body, !b.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            out.append(.init(id: "body", author: pr.author?.login, body: b, at: "", kind: .description))
+            out.append(.init(id: "body", author: pr.author?.login, avatar: pr.author?.avatarUrl, body: b, at: "", kind: .description))
         }
         var byReview: [Int: [PRReviewComment]] = [:]
         var loose: [PRReviewComment] = []
@@ -34,14 +35,14 @@ enum PRTimeline {
             let body = r.body ?? ""
             let state = (r.state ?? "").uppercased()
             if body.isEmpty && inline.isEmpty && state == "COMMENTED" { continue }
-            out.append(.init(id: "review-\(r.reviewId)", author: r.author?.login, body: body,
+            out.append(.init(id: "review-\(r.reviewId)", author: r.author?.login, avatar: r.author?.avatarUrl, body: body,
                              at: r.submittedAt ?? "", kind: .review(state: state, inline: inline)))
         }
         for rc in loose {
-            out.append(.init(id: "inline-" + rc.id, author: rc.user, body: rc.body ?? "", at: rc.createdAt ?? "", kind: .inline(rc)))
+            out.append(.init(id: "inline-" + rc.id, author: rc.user, avatar: rc.avatarUrl, body: rc.body ?? "", at: rc.createdAt ?? "", kind: .inline(rc)))
         }
         for c in pr.comments ?? [] where !(c.body ?? "").isEmpty {
-            out.append(.init(id: "comment-" + c.id, author: c.author?.login, body: c.body ?? "", at: c.createdAt ?? "", kind: .comment))
+            out.append(.init(id: "comment-" + c.id, author: c.author?.login, avatar: c.author?.avatarUrl, body: c.body ?? "", at: c.createdAt ?? "", kind: .comment))
         }
         return out.sorted { a, b in
             if a.kind == .description { return true }

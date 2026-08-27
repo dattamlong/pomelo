@@ -41,7 +41,7 @@ struct PRInfo: Decodable, Equatable {
     var labels: [Label]?
     var statusCheckRollup: [Check]?
 
-    struct Author: Decodable, Equatable { var login: String? }
+    struct Author: Decodable, Equatable { var login: String?; var avatarUrl: String? }
     struct ReviewRequest: Decodable, Equatable { var login: String?; var name: String?; var slug: String? }
 
     struct Reviewer: Decodable, Identifiable, Equatable { var name = ""; var state = ""; var id: String { name } }
@@ -101,7 +101,7 @@ struct PRCommit: Decodable, Identifiable, Equatable {
 }
 
 struct PRReviewComment: Decodable, Identifiable, Equatable {
-    var user: String?; var body: String?; var path: String?; var line: Int?
+    var user: String?; var avatarUrl: String?; var body: String?; var path: String?; var line: Int?
     var diffHunk: String?; var createdAt: String?; var reviewId: Int?
     var id: String { (user ?? "") + (path ?? "") + String(line ?? 0) + String((body ?? "").prefix(12)) }
 }
@@ -581,7 +581,7 @@ struct PRDetail: View {
                     Rectangle().fill(Theme.borderSoft).frame(height: 1)
                 }
                 if let body = pr?.body, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    commentCard(author: pr?.author?.login, headline: "opened this pull request", body: body)
+                    commentCard(author: pr?.author?.login, avatar: pr?.author?.avatarUrl, headline: "opened this pull request", body: body)
                 } else {
                     Text("No description.").font(.system(size: 12)).foregroundStyle(Theme.dim)
                 }
@@ -641,7 +641,7 @@ struct PRDetail: View {
                         ForEach(items) { timelineRow($0) }
                     }
                     .padding(.horizontal, 14).padding(.vertical, 12)
-                    .readingColumn()
+                    .readingColumn(940)
                 }
             }
         }
@@ -649,26 +649,28 @@ struct PRDetail: View {
     }
 
     private let railWidth: CGFloat = 28
+    private let avatarSize: CGFloat = 36
 
     @ViewBuilder private func timelineRow(_ it: PRTimelineItem) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            timelineNode(it.kind)
+        HStack(alignment: .top, spacing: 8) {
+            Avatar(url: it.avatar, name: it.author, size: avatarSize)
+            timelineNode(it)
                 .frame(width: railWidth)
-                .frame(maxHeight: .infinity)
+                .frame(maxHeight: .infinity, alignment: .top)
                 .background(alignment: .top) { Rectangle().fill(Theme.borderSoft).frame(width: 2) }
             VStack(alignment: .leading, spacing: 8) {
                 switch it.kind {
                 case .description:
-                    commentCard(author: it.author, headline: "opened this pull request", body: it.body)
+                    commentCard(author: it.author, avatar: it.avatar, headline: "opened this pull request", body: it.body)
                 case .comment:
-                    commentCard(author: it.author, headline: "commented", body: it.body)
+                    commentCard(author: it.author, avatar: it.avatar, headline: "commented", body: it.body)
                 case .review(let state, let inline):
-                    HStack(spacing: 5) {
+                    HStack(spacing: 6) {
                         Text(it.author ?? "someone").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.fg)
                         Text(reviewVerb(state)).font(.system(size: 12)).foregroundStyle(Theme.fgMuted)
                         Spacer()
-                    }.frame(minHeight: 22)
-                    if !it.body.isEmpty { commentCard(author: it.author, headline: "left a comment", body: it.body) }
+                    }.frame(height: avatarSize)
+                    if !it.body.isEmpty { commentCard(author: it.author, avatar: it.avatar, headline: "left a comment", body: it.body) }
                     ForEach(inline) { rc in inlineCard(rc).padding(.leading, 24) }
                 case .inline(let rc):
                     inlineCard(rc)
@@ -678,7 +680,14 @@ struct PRDetail: View {
         }
     }
 
-    @ViewBuilder private func timelineNode(_ kind: PRTimelineItem.Kind) -> some View {
+    @ViewBuilder private func timelineNode(_ it: PRTimelineItem) -> some View {
+        switch it.kind {
+        case .description, .comment: Color.clear.frame(height: 1)
+        default: timelineIcon(it.kind).frame(height: avatarSize)
+        }
+    }
+
+    @ViewBuilder private func timelineIcon(_ kind: PRTimelineItem.Kind) -> some View {
         let (icon, col): (String, Color) = {
             switch kind {
             case .review(let state, _):
@@ -707,9 +716,10 @@ struct PRDetail: View {
         }
     }
 
-    private func commentCard(author: String?, headline: String, body: String) -> some View {
+    private func commentCard(author: String?, avatar: String? = nil, headline: String, body: String) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
+                Avatar(url: avatar, name: author, size: 20)
                 Text(author ?? "unknown").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.fg)
                 Text(headline).font(.system(size: 11.5)).foregroundStyle(Theme.fgMuted)
                 Spacer()
@@ -740,7 +750,10 @@ struct PRDetail: View {
             }
             Divider().overlay(Theme.borderSoft)
             VStack(alignment: .leading, spacing: 6) {
-                Text(rc.user ?? "unknown").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.fg)
+                HStack(spacing: 6) {
+                    Avatar(url: rc.avatarUrl, name: rc.user, size: 24)
+                    Text(rc.user ?? "unknown").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.fg)
+                }
                 MarkdownText(rc.body ?? "")
             }
             .padding(12)
@@ -881,12 +894,5 @@ struct FlowChips: View {
     private func labelColor(_ hex: String?) -> Color {
         guard let h = hex, let v = UInt32(h.trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) else { return Theme.fgMuted }
         return Color(hex: v)
-    }
-}
-
-private extension View {
-    // GitHub-style reading column: long prose and diffs are hard to scan edge-to-edge.
-    func readingColumn(_ max: CGFloat = 880) -> some View {
-        frame(maxWidth: max).frame(maxWidth: .infinity)
     }
 }

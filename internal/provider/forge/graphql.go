@@ -144,7 +144,7 @@ const prBatch = 20
 const prNodeFields = `        number title state url isDraft mergeable mergeStateStatus
         headRefName baseRefName additions deletions changedFiles createdAt updatedAt
         reviewDecision
-        author { login }
+        author { login avatarUrl }
         latestReviews(first: 30) { nodes { state submittedAt author { login } } }
         commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
           __typename
@@ -198,14 +198,16 @@ type gqlPR struct {
 	UpdatedAt        string
 	ReviewDecision   string
 	Author           *struct {
-		Login string `json:"login"`
+		Login     string `json:"login"`
+		AvatarURL string `json:"avatarUrl"`
 	}
 	LatestReviews struct {
 		Nodes []struct {
 			State       string `json:"state"`
 			SubmittedAt string `json:"submittedAt"`
 			Author      *struct {
-				Login string `json:"login"`
+				Login     string `json:"login"`
+				AvatarURL string `json:"avatarUrl"`
 			} `json:"author"`
 		} `json:"nodes"`
 	}
@@ -216,7 +218,8 @@ type gqlPR struct {
 			Body        string `json:"body"`
 			SubmittedAt string `json:"submittedAt"`
 			Author      *struct {
-				Login string `json:"login"`
+				Login     string `json:"login"`
+				AvatarURL string `json:"avatarUrl"`
 			} `json:"author"`
 		} `json:"nodes"`
 	} `json:"reviews"`
@@ -260,15 +263,16 @@ type gqlPR struct {
 	} `json:"reviewRequests"`
 	Comments struct {
 		Nodes []struct {
-			Author    *struct{ Login string } `json:"author"`
-			Body      string                  `json:"body"`
-			CreatedAt string                  `json:"createdAt"`
+			Author    *struct{ Login, AvatarURL string } `json:"author"`
+			Body      string                             `json:"body"`
+			CreatedAt string                             `json:"createdAt"`
 		} `json:"nodes"`
 	} `json:"comments"`
 }
 
 type ghActor struct {
-	Login string `json:"login"`
+	Login     string `json:"login"`
+	AvatarURL string `json:"avatarUrl,omitempty"`
 }
 type ghReview struct {
 	Author      *ghActor `json:"author,omitempty"`
@@ -357,19 +361,19 @@ func (p gqlPR) toGH() ghPR {
 		UpdatedAt:        p.UpdatedAt,
 	}
 	if p.Author != nil {
-		out.Author = &ghActor{Login: p.Author.Login}
+		out.Author = &ghActor{Login: p.Author.Login, AvatarURL: p.Author.AvatarURL}
 	}
 	for _, rv := range p.Reviews.Nodes {
 		r := ghReviewEntry{ReviewID: rv.DatabaseID, State: rv.State, Body: rv.Body, SubmittedAt: rv.SubmittedAt}
 		if rv.Author != nil {
-			r.Author = &ghActor{Login: rv.Author.Login}
+			r.Author = &ghActor{Login: rv.Author.Login, AvatarURL: rv.Author.AvatarURL}
 		}
 		out.ReviewLog = append(out.ReviewLog, r)
 	}
 	for _, rv := range p.LatestReviews.Nodes {
 		r := ghReview{State: rv.State, SubmittedAt: rv.SubmittedAt}
 		if rv.Author != nil {
-			r.Author = &ghActor{Login: rv.Author.Login}
+			r.Author = &ghActor{Login: rv.Author.Login, AvatarURL: rv.Author.AvatarURL}
 		}
 		out.Reviews = append(out.Reviews, r)
 	}
@@ -385,7 +389,7 @@ func (p gqlPR) toGH() ghPR {
 	for _, c := range p.Comments.Nodes {
 		cm := ghComment{Body: c.Body, CreatedAt: c.CreatedAt}
 		if c.Author != nil {
-			cm.Author = &ghActor{Login: c.Author.Login}
+			cm.Author = &ghActor{Login: c.Author.Login, AvatarURL: c.Author.AvatarURL}
 		}
 		out.Comments = append(out.Comments, cm)
 	}
