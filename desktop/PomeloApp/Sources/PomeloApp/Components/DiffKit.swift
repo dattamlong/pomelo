@@ -213,7 +213,7 @@ struct DiffFilesView: View {
                                 } else if splitDiff {
                                     DiffFileView(file: f)
                                 } else {
-                                    NativeDiffView(file: f, isDark: theme.mode == .dark)
+                                    NativeDiffView(file: f, isDark: theme.mode.isDark)
                                 }
                             } else {
                                 centered("Select a file")
