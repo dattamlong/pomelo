@@ -196,6 +196,8 @@ final class PomCore: @unchecked Sendable {
     func prRefresh() -> Data { command(domain: "pr", action: "refresh", params: Data("{}".utf8)) }
     func prCommitsData(branch: String, repo: String, base: String, isMain: Bool) -> Data { query(domain: "pr_commits", params: jp(["branch": branch, "repo": repo, "base": base, "is_main": isMain])) }
     func prDiffData(branch: String, repo: String, isMain: Bool) -> Data { fetch(domain: "pr_diff", params: jp(["branch": branch, "repo": repo, "is_main": isMain])) }
+    func reviewGetData(branch: String, isMain: Bool) -> Data { fetch(domain: "review_get", params: jp(["branch": branch, "is_main": isMain])) }
+    func filePeekData(branch: String, repo: String, path: String, isMain: Bool) -> Data { fetch(domain: "file_peek", params: jp(["branch": branch, "repo": repo, "path": path, "is_main": isMain])) }
     func localChangesData(branch: String, isMain: Bool) -> Data { fetch(domain: "local_changes", params: jp(["branch": branch, "is_main": isMain])) }
     func localDiffData(branch: String, repo: String, isMain: Bool) -> Data { fetch(domain: "local_diff", params: jp(["branch": branch, "repo": repo, "is_main": isMain]))
     }

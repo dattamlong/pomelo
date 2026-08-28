@@ -62,6 +62,8 @@ final class MockPomAPI: PomAPI {
     func prCommentsData(branch: String, repo: String, isMain: Bool) -> Data { Data(#"{"comments":[]}"#.utf8) }
     func prTimelineData(branch: String, repo: String, isMain: Bool) -> Data { Data(#"{"items":[]}"#.utf8) }
     func prRefresh() -> Data { Data(#"{"ok":true}"#.utf8) }
+    func reviewGetData(branch: String, isMain: Bool) -> Data { Data(#"{"exists":false}"#.utf8) }
+    func filePeekData(branch: String, repo: String, path: String, isMain: Bool) -> Data { Data(#"{"content":""}"#.utf8) }
     func prCommitsData(branch: String, repo: String, base: String, isMain: Bool) -> Data { Data(#"{"commits":[]}"#.utf8) }
     func prDiffData(branch: String, repo: String, isMain: Bool) -> Data { Data() }
     func jiraBoardsData() -> Data { Data(#"{"configured":false}"#.utf8) }

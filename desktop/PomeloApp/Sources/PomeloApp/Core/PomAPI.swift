@@ -92,6 +92,8 @@ protocol PRAPI: PomBaseAPI {
     func prRefresh() -> Data
     func prCommitsData(branch: String, repo: String, base: String, isMain: Bool) -> Data
     func prDiffData(branch: String, repo: String, isMain: Bool) -> Data
+    func reviewGetData(branch: String, isMain: Bool) -> Data
+    func filePeekData(branch: String, repo: String, path: String, isMain: Bool) -> Data
 }
 
 protocol JiraAPI: PomBaseAPI {

@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum PaneKind: String, CaseIterable, Identifiable {
-    case claude = "Claude", services = "Services", prs = "PRs", jira = "Jira", database = "Database"
+    case claude = "Claude", services = "Services", prs = "PRs", jira = "Jira", database = "Database", review = "Review"
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -10,6 +10,7 @@ enum PaneKind: String, CaseIterable, Identifiable {
         case .prs:      return "arrow.triangle.pull"
         case .jira:     return "ticket"
         case .database: return "cylinder.split.1x2"
+        case .review:   return "doc.text.magnifyingglass"
         }
     }
 }
@@ -129,6 +130,7 @@ struct WorkspacePaneInner: View {
         case .prs:    PRsBoard(workspace: workspace)
         case .jira:   JiraPane(workspace: workspace)
         case .database: DatabasePane(workspace: workspace).id("db-\(safeWs)")
+        case .review: ReviewPane(workspace: workspace)
         }
     }
 
@@ -167,6 +169,7 @@ struct WorkspacePaneInner: View {
             navBtn(.prs, "2", "PRs")
             navBtn(.jira, "3", "Jira")
             navBtn(.database, "4", "Database")
+            navBtn(.review, "5", "Review")
             editorBtn
             Divider().frame(height: 13).overlay(Theme.borderSoft).padding(.horizontal, 3)
             terminalToggle

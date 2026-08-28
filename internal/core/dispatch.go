@@ -316,6 +316,10 @@ func (s *Server) Fetch(domain string, params json.RawMessage) []byte {
 			return nil
 		}
 		return diffparse.ParseJSON(out)
+	case "review_get":
+		return s.ReviewGet(branch, isMain)
+	case "file_peek":
+		return s.FilePeek(branch, repo, pStr(params, "path"), isMain)
 	case "local_changes":
 		return s.WorkspaceLocalChanges(branch, isMain)
 	case "local_diff":
