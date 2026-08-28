@@ -38,6 +38,7 @@ func (s *Server) FilePeek(branch, repo, path string, isMain bool) []byte {
 	if strings.Contains(path, "..") || filepath.IsAbs(path) {
 		return []byte(`{"error":"bad path"}`)
 	}
+	repo = s.resolveRepoDir(repo)
 	wt := repoWorktreePath(s.WorkspaceRoot, repo, branch, isMain)
 	var content string
 	refs := []string{}
@@ -60,4 +61,23 @@ func (s *Server) FilePeek(branch, repo, path string, isMain bool) []byte {
 	}
 	out, _ := json.Marshal(map[string]any{"repo": repo, "path": path, "content": content})
 	return out
+}
+
+// resolveRepoDir maps a repo reference that may be a pom.yml alias to the actual
+// worktree directory name, so review anchors authored with friendly aliases still
+// resolve. Returns the input unchanged when no match.
+func (s *Server) resolveRepoDir(repo string) string {
+	cfg := s.cfg()
+	if cfg == nil || repo == "" {
+		return repo
+	}
+	if _, ok := cfg.Repos[repo]; ok {
+		return repo
+	}
+	for dir, d := range cfg.Repos {
+		if d != nil && d.Alias == repo {
+			return dir
+		}
+	}
+	return repo
 }

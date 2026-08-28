@@ -124,17 +124,6 @@ struct ReviewAnchor: Decodable, Identifiable {
     enum K: String, CodingKey { case id, repo, path, start, end, side, note }
 }
 
-enum ReviewStore {
-    nonisolated static func get(branch: String, isMain: Bool) -> Data {
-        PomCore.shared.reviewGetData(branch: branch, isMain: isMain)
-    }
-    nonisolated static func peek(branch: String, repo: String, path: String, isMain: Bool) -> Data {
-        PomCore.shared.filePeekData(branch: branch, repo: repo, path: path, isMain: isMain)
-    }
-    nonisolated static func threads(branch: String, isMain: Bool) -> Data {
-        PomCore.shared.reviewThreadsData(branch: branch, isMain: isMain)
-    }
-}
 
 struct ReviewComment: Decodable {
     var author = ""
@@ -636,10 +625,8 @@ struct ReviewThreadsView: View {
         guard !body.isEmpty else { return }
         sending = true; error = ""
         let t = target, branch = branch, isMain = isMain, s = noteStart, e = noteEnd
-        let res = await Task.detached(priority: .userInitiated) { () -> [String: Any] in
-            let data = PomCore.shared.reviewThreadAdd(branch: branch, isMain: isMain, repo: t.repo, path: t.path,
-                                                      start: s, end: e, side: "head", body: body)
-            return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        let res = await Task.detached(priority: .userInitiated) {
+            ReviewStore.addNote(branch: branch, isMain: isMain, repo: t.repo, path: t.path, start: s, end: e, body: body)
         }.value
         sending = false
         if (res["ok"] as? Bool) != true { error = (res["error"] as? String) ?? "failed" }
@@ -651,8 +638,8 @@ struct ReviewThreadsView: View {
         let body = replyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty else { return }
         let branch = branch, isMain = isMain, id = t.id
-        _ = await Task.detached(priority: .userInitiated) {
-            PomCore.shared.reviewThreadReply(branch: branch, isMain: isMain, id: id, body: body)
+        await Task.detached(priority: .userInitiated) {
+            ReviewStore.reply(branch: branch, isMain: isMain, id: id, body: body)
         }.value
         replyTo = nil; replyDraft = ""
         await onChange()
@@ -660,8 +647,8 @@ struct ReviewThreadsView: View {
 
     private func resolve(_ t: ReviewThread, _ resolved: Bool) async {
         let branch = branch, isMain = isMain, id = t.id
-        _ = await Task.detached(priority: .userInitiated) {
-            PomCore.shared.reviewThreadResolve(branch: branch, isMain: isMain, id: id, resolved: resolved)
+        await Task.detached(priority: .userInitiated) {
+            ReviewStore.resolve(branch: branch, isMain: isMain, id: id, resolved: resolved)
         }.value
         await onChange()
     }
@@ -860,7 +847,8 @@ struct DiagramView: View {
             cursor += CGFloat(ends) * endBuffer
         }
         let contentH = cursor + 24
-        return ScrollView([.horizontal, .vertical]) {
+        return GeometryReader { geo in
+          ScrollView([.horizontal, .vertical]) {
             ZStack(alignment: .topLeading) {
                 Canvas { ctx, _ in
                     for i in 0..<n {
@@ -991,8 +979,12 @@ struct DiagramView: View {
             }
             .frame(width: contentW, height: contentH)
             .padding(.trailing, 40)
+            // Fill at least the viewport, top-left aligned, so a small diagram pins to
+            // the top-left instead of the bidirectional ScrollView centering it.
+            .frame(minWidth: geo.size.width, minHeight: geo.size.height, alignment: .topLeading)
+          }
+          .background(Theme.bg)
         }
-        .background(Theme.bg)
     }
 
     private func label(_ s: String) -> Text {
@@ -1128,22 +1120,28 @@ struct FlowTourPanel: View {
     @ViewBuilder private func codeLines(_ s: DiagramStep) -> some View {
         let c = coords(s)
         if let lines = files[key(s)] {
-            let lo = max(1, c.start), hi = min(max(lo, c.end), lines.count)
-            VStack(alignment: .leading, spacing: 1) {
-                ForEach(lo...max(lo, hi), id: \.self) { n in
-                    if n - 1 < lines.count {
-                        HStack(spacing: 0) {
-                            Text("\(n)").font(Theme.mono(9.5)).foregroundStyle(Theme.dim)
-                                .frame(width: 34, alignment: .trailing).padding(.trailing, 8)
-                            highlighted(lines[n - 1].text, spans: lines[n - 1].spans)
-                                .textSelection(.enabled).lineLimit(1)
-                            Spacer(minLength: 0)
+            if lines.isEmpty {
+                Text("(file not found — check the repo/path)").font(.system(size: 10.5))
+                    .foregroundStyle(Theme.dim).padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                let lo = max(1, c.start), hi = min(max(lo, c.end), lines.count)
+                VStack(alignment: .leading, spacing: 1) {
+                    ForEach(lo...max(lo, hi), id: \.self) { n in
+                        if n - 1 < lines.count {
+                            HStack(spacing: 0) {
+                                Text("\(n)").font(Theme.mono(9.5)).foregroundStyle(Theme.dim)
+                                    .frame(width: 34, alignment: .trailing).padding(.trailing, 8)
+                                highlighted(lines[n - 1].text, spans: lines[n - 1].spans)
+                                    .textSelection(.enabled).lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
                         }
                     }
                 }
+                .padding(.vertical, 6).padding(.leading, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.vertical, 6).padding(.leading, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             HStack { Spinner(size: 11); Text("loading…").font(.system(size: 10)).foregroundStyle(Theme.dim) }
                 .padding(8)
