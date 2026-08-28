@@ -1126,21 +1126,22 @@ struct FlowTourPanel: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 let lo = max(1, c.start), hi = min(max(lo, c.end), lines.count)
-                VStack(alignment: .leading, spacing: 1) {
-                    ForEach(lo...max(lo, hi), id: \.self) { n in
-                        if n - 1 < lines.count {
-                            HStack(spacing: 0) {
-                                Text("\(n)").font(Theme.mono(9.5)).foregroundStyle(Theme.dim)
-                                    .frame(width: 34, alignment: .trailing).padding(.trailing, 8)
-                                highlighted(lines[n - 1].text, spans: lines[n - 1].spans)
-                                    .textSelection(.enabled).lineLimit(1)
-                                Spacer(minLength: 0)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(lo...max(lo, hi), id: \.self) { n in
+                            if n - 1 < lines.count {
+                                HStack(spacing: 0) {
+                                    Text("\(n)").font(Theme.mono(9.5)).foregroundStyle(Theme.dim)
+                                        .frame(width: 34, alignment: .trailing).padding(.trailing, 8)
+                                    highlighted(lines[n - 1].text, spans: lines[n - 1].spans)
+                                        .textSelection(.enabled).lineLimit(1)
+                                        .fixedSize(horizontal: true, vertical: false)
+                                }
                             }
                         }
                     }
+                    .padding(.vertical, 6).padding(.leading, 4).padding(.trailing, 12)
                 }
-                .padding(.vertical, 6).padding(.leading, 4)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         } else {
             HStack { Spinner(size: 11); Text("loading…").font(.system(size: 10)).foregroundStyle(Theme.dim) }
