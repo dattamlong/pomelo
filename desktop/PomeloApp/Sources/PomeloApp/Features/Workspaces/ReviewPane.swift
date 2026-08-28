@@ -198,25 +198,37 @@ struct ReviewPane: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.bg)
         .task(id: workspace.id) { await load() }
-        .onChange(of: isActive) { if isActive { Task { await load() } } }
+        // Reload only while still empty (waiting on generation); once a review exists,
+        // leave it so the timeline scroll position survives switching away and back.
+        .onChange(of: isActive) {
+            if isActive, !(review?.exists ?? false) { Task { await load() } }
+        }
     }
 
-    // Flow view -> the step timeline on the right; Narrative -> the single code peek.
+    // Flow view -> the step timeline on the right (with the "Open" peek OVERLAID so the
+    // timeline stays mounted and keeps its scroll); Narrative -> the single code peek.
     @ViewBuilder private var rightPane: some View {
-        if let t = peek {
-            // Peek wins: "Open" from a Flow step shows the full file over the timeline.
+        if showingFlow, let dg = review?.diagram {
+            SplitHandle(axis: .horizontal, value: $previewWidth, min: 380, max: 1000, invert: true)
+            ZStack {
+                FlowTourPanel(diagram: dg, anchors: review?.anchors ?? [],
+                              branch: workspace.branch, isMain: workspace.isMain,
+                              focused: $focusedStep, onOpenFull: openStep)
+                if let t = peek {
+                    CodePeekPane(target: t, branch: workspace.branch, isMain: workspace.isMain,
+                                 canAsk: canAsk, onAskAgent: askAgent, onClose: { peek = nil })
+                        .id(t.id)
+                        .transition(.move(edge: .trailing))
+                }
+            }
+            .frame(width: previewWidth)
+        } else if let t = peek {
             SplitHandle(axis: .horizontal, value: $previewWidth, min: 340, max: 1000, invert: true)
             CodePeekPane(target: t, branch: workspace.branch, isMain: workspace.isMain,
                          canAsk: canAsk, onAskAgent: askAgent, onClose: { peek = nil })
                 .frame(width: previewWidth)
                 .id(t.id)
                 .transition(.move(edge: .trailing))
-        } else if showingFlow, let dg = review?.diagram {
-            SplitHandle(axis: .horizontal, value: $previewWidth, min: 380, max: 1000, invert: true)
-            FlowTourPanel(diagram: dg, anchors: review?.anchors ?? [],
-                          branch: workspace.branch, isMain: workspace.isMain,
-                          focused: $focusedStep, onOpenFull: openStep)
-                .frame(width: previewWidth)
         }
     }
 
@@ -1057,7 +1069,37 @@ struct FlowTourPanel: View {
             }
         }
         .background(Theme.bg)
+        .overlay(alignment: .bottom) { pager }
         .task(id: diagram.steps.count) { await loadFiles() }
+    }
+
+    private var pager: some View {
+        let n = diagram.steps.count
+        let cur = focused ?? 0
+        return HStack(spacing: 12) {
+            pagerBtn("chevron.up") { step(-1) }.disabled(cur <= 0)
+            Text("\(cur + 1) / \(n)").font(Theme.mono(11, .semibold)).foregroundStyle(Theme.fg).monospacedDigit()
+            pagerBtn("chevron.down") { step(1) }.disabled(cur >= n - 1)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(Theme.borderSoft))
+        .shadow(color: .black.opacity(0.25), radius: 10, y: 3)
+        .padding(.bottom, 14)
+    }
+
+    private func pagerBtn(_ icon: String, _ act: @escaping () -> Void) -> some View {
+        Button(action: act) {
+            Image(systemName: icon).font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.fgSoft).frame(width: 22, height: 22)
+                .background(Theme.hover, in: Circle())
+        }.buttonStyle(.plain)
+    }
+
+    private func step(_ d: Int) {
+        let n = diagram.steps.count
+        guard n > 0 else { return }
+        focused = min(max((focused ?? 0) + d, 0), n - 1)
     }
 
     private func stepCard(_ k: Int, _ s: DiagramStep) -> some View {
