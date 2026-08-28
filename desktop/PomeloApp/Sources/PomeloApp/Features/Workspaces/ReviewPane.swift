@@ -1060,7 +1060,7 @@ struct FlowTourPanel: View {
                         stepCard(k, s).id("tour-\(k)")
                     }
                 }
-                .padding(.vertical, 12)
+                .padding(.top, 12).padding(.bottom, 64) // clears the floating pager
             }
             .contentMargins(.top, 16, for: .scrollContent)
             .onChange(of: focused) { _ in
