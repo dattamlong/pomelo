@@ -421,7 +421,7 @@ func (s *Server) proxyToWorkspaceService(w http.ResponseWriter, r *http.Request,
 	}
 	host := services.BindIP() + ":" + strconv.Itoa(port)
 	ctx := context.WithValue(r.Context(), proxyTargetKey, host)
-	if s.renderProbeEnabled(target) {
+	if s.renderProbeEnabled(s.branchForHostLabel(branchLabel), target) {
 		ctx = context.WithValue(ctx, proxyProbeKey, target)
 	}
 	s.devProxy().ServeHTTP(w, r.WithContext(ctx))

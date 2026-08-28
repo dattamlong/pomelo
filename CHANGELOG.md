@@ -7,7 +7,7 @@ All notable changes to Pomelo are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
-- Render tab in the Review pane: counts React component renders in the running dev app (renders, wasted re-renders, self time, why) and flags hot / slow / wasted components. Opt in per web service with `render_probe: true`; the dev proxy injects the probe into the page and aggregates in the core.
+- Render tab in the Review pane: counts React component renders in the running dev app (renders, wasted re-renders, self time, why) and flags hot / slow / wasted components. On automatically for services whose package.json depends on react; toggle per service in the tab, or pin with `render_probe: true|false` in pom.yml. The dev proxy injects the probe into the page and aggregates in the core.
 
 ## [0.3.3] - 2026-08-28
 

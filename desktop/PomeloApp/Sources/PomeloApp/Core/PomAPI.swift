@@ -100,6 +100,8 @@ protocol PRAPI: PomBaseAPI {
     func reviewThreadResolve(branch: String, isMain: Bool, id: String, resolved: Bool) -> Data
     func renderSummaryData(branch: String, window: Int) -> Data
     func renderClear(branch: String) -> Data
+    func renderProbesData(branch: String) -> Data
+    func renderSetProbe(branch: String, target: String, enabled: Bool) -> Data
 }
 
 protocol JiraAPI: PomBaseAPI {

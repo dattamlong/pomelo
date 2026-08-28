@@ -37,6 +37,7 @@ final class ContractTests: XCTestCase {
         let t = decode(RenderSummary.self,
             #"{"window_s":30,"targets":[{"repo":"r","svc":"s","commits":0,"truncated":false,"probe_ms":0,"last_seen":0,"components":[]}]}"#)
         XCTAssertEqual(t?.targets.first?.components.count, 0)
+        XCTAssertEqual(decode(RenderProbe.self, #"{"repo":"r","svc":"s","target":"r/s","react":false,"enabled":false,"source":"auto"}"#)?.target, "r/s")
     }
 
     func testWorkspacesResponseEmpty() {

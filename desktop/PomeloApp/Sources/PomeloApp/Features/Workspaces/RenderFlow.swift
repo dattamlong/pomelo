@@ -51,9 +51,34 @@ struct RenderComponent: Decodable, Equatable, Identifiable {
     enum K: String, CodingKey { case name, renders, wasted, selfAvg = "self_avg", selfMax = "self_max", why, flags, src }
 }
 
+struct RenderProbe: Decodable, Equatable, Identifiable {
+    var repo = ""; var svc = ""; var target = ""; var react = false; var enabled = false; var source = "auto"
+    var id: String { target }
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: K.self)
+        repo = try c.decodeIfPresent(String.self, forKey: .repo) ?? ""
+        svc = try c.decodeIfPresent(String.self, forKey: .svc) ?? ""
+        target = try c.decodeIfPresent(String.self, forKey: .target) ?? ""
+        react = try c.decodeIfPresent(Bool.self, forKey: .react) ?? false
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        source = try c.decodeIfPresent(String.self, forKey: .source) ?? "auto"
+    }
+    enum K: String, CodingKey { case repo, svc, target, react, enabled, source }
+}
+
+private struct ProbeList: Decodable {
+    var probes: [RenderProbe] = []
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: K.self)
+        probes = try c.decodeIfPresent([RenderProbe].self, forKey: .probes) ?? []
+    }
+    enum K: String, CodingKey { case probes }
+}
+
 @MainActor
 final class RenderFlowViewModel: ObservableObject {
     @Published private(set) var summary = RenderSummary()
+    @Published private(set) var probes: [RenderProbe] = []
     @Published private(set) var loaded = false
     @Published var window = 10
 
@@ -62,11 +87,19 @@ final class RenderFlowViewModel: ObservableObject {
 
     var hasData: Bool { summary.targets.contains { $0.commits > 0 } }
     var probeSeen: Bool { !summary.targets.isEmpty }
+    var enabledProbes: [RenderProbe] { probes.filter(\.enabled) }
 
     func load(branch: String) async {
         let d = await api.call { $0.renderSummaryData(branch: branch, window: self.window) }
         if let s = PomJSON.decode(RenderSummary.self, from: d) { summary = s }
+        let p = await api.call { $0.renderProbesData(branch: branch) }
+        if let l = PomJSON.decode(ProbeList.self, from: p) { probes = l.probes }
         loaded = true
+    }
+
+    func setProbe(branch: String, target: String, enabled: Bool) async {
+        _ = await api.call { $0.renderSetProbe(branch: branch, target: target, enabled: enabled) }
+        await load(branch: branch)
     }
 
     func clear(branch: String) async {
@@ -91,6 +124,10 @@ struct RenderFlowView: View {
         VStack(spacing: 0) {
             header
             Divider().overlay(Theme.borderSoft)
+            if !vm.probes.isEmpty {
+                probeBar
+                Divider().overlay(Theme.borderSoft)
+            }
             if !vm.loaded {
                 LoadingView(text: "listening for renders…")
             } else if !vm.hasData {
@@ -124,16 +161,44 @@ struct RenderFlowView: View {
         .background(Theme.bgSoft)
     }
 
+    // One switch per ported service; React ones are on by default (detected in the core).
+    private var probeBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Text("PROBE").font(.system(size: 10, weight: .semibold)).kerning(0.6).foregroundStyle(Theme.muted)
+                ForEach(vm.probes) { p in
+                    Toggle(isOn: Binding(get: { p.enabled },
+                                         set: { on in Task { await vm.setProbe(branch: workspace.branch, target: p.target, enabled: on) } })) {
+                        HStack(spacing: 4) {
+                            Text(p.target).font(Theme.mono(10.5))
+                            if p.react { Image(systemName: "atom").font(.system(size: 9)).foregroundStyle(Theme.tool) }
+                            if p.source != "auto" { Text(p.source).font(.system(size: 9)).foregroundStyle(Theme.dim) }
+                        }
+                    }
+                    .toggleStyle(.switch).controlSize(.mini)
+                    .foregroundStyle(p.enabled ? Theme.fg : Theme.fgMuted)
+                    .help(p.react ? "React detected in package.json" : "No react dependency found; you can still force the probe on")
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 14).padding(.vertical, 6)
+        }
+        .background(Theme.bgSoft)
+    }
+
     private var empty: some View {
-        VStack(spacing: 14) {
+        let on = vm.enabledProbes
+        return VStack(spacing: 14) {
             Image(systemName: "waveform.path.ecg").font(.system(size: 30)).foregroundStyle(Theme.dim)
             VStack(spacing: 6) {
-                Text(vm.probeSeen ? "Probe connected, no renders yet" : "No render data").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.fgMuted)
-                Text(vm.probeSeen
-                     ? "Interact with the app; commits show up here within a second."
-                     : "Set `render_probe: true` on the web service in pom.yml, then open the app through its Pomelo URL.")
+                Text(vm.probeSeen ? "Probe connected, no renders yet"
+                     : on.isEmpty ? "No probe enabled" : "Waiting for the app")
+                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.fgMuted)
+                Text(vm.probeSeen ? "Interact with the app; commits show up here within a second."
+                     : on.isEmpty ? "Turn on the probe for a React service above, or set `render_probe: true` in pom.yml."
+                     : "Probe is on for \(on.map(\.target).joined(separator: ", ")). Start the service and open it with its Open button (the Pomelo URL, not 127.0.0.1).")
                     .font(.system(size: 12)).foregroundStyle(Theme.dim).multilineTextAlignment(.center)
-                    .frame(maxWidth: 420)
+                    .frame(maxWidth: 440)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

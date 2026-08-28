@@ -250,8 +250,8 @@ type Service struct {
 	Modes     map[string]string `yaml:"modes"`
 	Mode      string            `yaml:"mode"`
 	Profiles  StringList        `yaml:"profiles"`
-	// Inject the React render probe into this service's HTML via the dev proxy.
-	RenderProbe bool `yaml:"render_probe"`
+	// Render probe: nil = auto (on when the service dir depends on react), true/false force.
+	RenderProbe *bool `yaml:"render_probe"`
 }
 
 func (s *Service) ActiveCmd(modeOverride string) string {

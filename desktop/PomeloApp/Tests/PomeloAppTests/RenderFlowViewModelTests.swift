@@ -25,6 +25,20 @@ final class RenderFlowViewModelTests: XCTestCase {
         await vm.load(branch: "feat")
         XCTAssertFalse(vm.probeSeen)
         XCTAssertFalse(vm.hasData)
+        XCTAssertTrue(vm.probes.isEmpty)
+    }
+
+    func testProbesDecodeAndToggleRoundTrips() async {
+        let mock = MockPomAPI()
+        mock.renderProbesJSON = #"{"probes":[{"repo":"client","svc":"portal","target":"client/portal","react":true,"enabled":true,"source":"auto"},{"repo":"api","svc":"web","target":"api/web","react":false,"enabled":false,"source":"auto"}]}"#
+        let vm = RenderFlowViewModel(api: mock)
+        await vm.load(branch: "feat")
+        XCTAssertEqual(vm.probes.count, 2)
+        XCTAssertEqual(vm.enabledProbes.map(\.target), ["client/portal"])
+        await vm.setProbe(branch: "feat", target: "api/web", enabled: true)
+        XCTAssertEqual(mock.renderSetProbeCalls.count, 1)
+        XCTAssertEqual(mock.renderSetProbeCalls[0].0, "api/web")
+        XCTAssertTrue(mock.renderSetProbeCalls[0].1)
     }
 
     func testClearResetsAndCallsCore() async {

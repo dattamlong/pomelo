@@ -39,6 +39,8 @@ type Server struct {
 
 	proxyLog   proxyLog
 	renderFlow *renderflow.Store
+	probeMu    sync.Mutex
+	probeOn    map[string]bool // branch\x00repo/svc manual override
 
 	dpOnce sync.Once
 	dp     *httputil.ReverseProxy

@@ -5,12 +5,17 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pomelohq/pomelo/internal/config"
 	"github.com/pomelohq/pomelo/internal/renderflow"
+	"github.com/pomelohq/pomelo/internal/services"
 )
 
 // Reserved dev-proxy namespace: never forwarded upstream.
@@ -18,30 +23,147 @@ const renderProbePrefix = "/_pom_dev/_pom/"
 
 const maxProbeBody = 256 << 10
 
-func (s *Server) renderProbeEnabled(target string) bool {
-	svc := serviceConfig(s.cfg(), target)
-	return svc != nil && svc.RenderProbe
+// Precedence: manual toggle from the app > pom.yml render_probe > auto (React
+// in the service dir's package.json).
+func (s *Server) renderProbeEnabled(branch, target string) bool {
+	if branch == "" {
+		return false
+	}
+	s.probeMu.Lock()
+	on, manual := s.probeOn[branch+"\x00"+target]
+	s.probeMu.Unlock()
+	if manual {
+		return on
+	}
+	repo, svc := serviceConfig(s.cfg(), target)
+	if svc == nil {
+		return false
+	}
+	if svc.RenderProbe != nil {
+		return *svc.RenderProbe
+	}
+	return detectReact(s.serviceDir(branch, repo, svc))
 }
 
-func serviceConfig(cfg *config.Config, target string) *config.Service {
+func (s *Server) serviceDir(branch, repo string, svc *config.Service) string {
+	wt := services.RepoWorktreePath(s.WorkspaceRoot, repo, branch, branch == s.DefaultBranch)
+	if svc.Dir != "" {
+		return filepath.Join(wt, svc.Dir)
+	}
+	return wt
+}
+
+var reactCache sync.Map // package.json path -> reactProbe
+
+type reactProbe struct {
+	mod   time.Time
+	react bool
+}
+
+func detectReact(dir string) bool {
+	pj := filepath.Join(dir, "package.json")
+	st, err := os.Stat(pj)
+	if err != nil {
+		return false
+	}
+	if c, ok := reactCache.Load(pj); ok && c.(reactProbe).mod.Equal(st.ModTime()) {
+		return c.(reactProbe).react
+	}
+	raw, err := os.ReadFile(pj)
+	react := false
+	if err == nil {
+		var pkg struct {
+			Deps    map[string]string `json:"dependencies"`
+			DevDeps map[string]string `json:"devDependencies"`
+		}
+		if json.Unmarshal(raw, &pkg) == nil {
+			_, a := pkg.Deps["react"]
+			_, b := pkg.DevDeps["react"]
+			react = a || b
+		}
+	}
+	reactCache.Store(pj, reactProbe{mod: st.ModTime(), react: react})
+	return react
+}
+
+func serviceConfig(cfg *config.Config, target string) (repo string, svc *config.Service) {
 	if cfg == nil {
-		return nil
+		return "", nil
 	}
 	i := strings.IndexByte(target, '/')
 	if i < 0 {
-		return nil
+		return "", nil
 	}
-	alias, svc := target[:i], target[i+1:]
-	for name, d := range cfg.Repos {
+	alias, name := target[:i], target[i+1:]
+	for rname, d := range cfg.Repos {
 		a := d.Alias
 		if a == "" {
-			a = name
+			a = rname
 		}
-		if a == alias || name == alias {
-			return d.Services[svc]
+		if a == alias || rname == alias {
+			return rname, d.Services[name]
 		}
 	}
-	return nil
+	return "", nil
+}
+
+type ProbeInfo struct {
+	Repo    string `json:"repo"`
+	Svc     string `json:"svc"`
+	Target  string `json:"target"`
+	React   bool   `json:"react"`
+	Enabled bool   `json:"enabled"`
+	Source  string `json:"source"` // manual | config | auto
+}
+
+// RenderProbes lists every ported service of the branch with its probe state so
+// the app can offer a toggle without knowing the precedence rules.
+func (s *Server) RenderProbes(branch string) map[string]any {
+	out := []ProbeInfo{}
+	cfg := s.cfg()
+	if cfg == nil || branch == "" {
+		return map[string]any{"probes": out}
+	}
+	for rname, d := range cfg.Repos {
+		alias := d.Alias
+		if alias == "" {
+			alias = rname
+		}
+		for name, svc := range d.Services {
+			if svc == nil || svc.Port == nil || !*svc.Port {
+				continue
+			}
+			target := alias + "/" + name
+			p := ProbeInfo{Repo: alias, Svc: name, Target: target, React: detectReact(s.serviceDir(branch, rname, svc))}
+			s.probeMu.Lock()
+			on, manual := s.probeOn[branch+"\x00"+target]
+			s.probeMu.Unlock()
+			switch {
+			case manual:
+				p.Enabled, p.Source = on, "manual"
+			case svc.RenderProbe != nil:
+				p.Enabled, p.Source = *svc.RenderProbe, "config"
+			default:
+				p.Enabled, p.Source = p.React, "auto"
+			}
+			out = append(out, p)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Target < out[j].Target })
+	return map[string]any{"probes": out}
+}
+
+func (s *Server) RenderSetProbe(branch, target string, enabled bool) map[string]any {
+	if branch == "" || !strings.Contains(target, "/") {
+		return map[string]any{"ok": false, "error": "branch and target required"}
+	}
+	s.probeMu.Lock()
+	if s.probeOn == nil {
+		s.probeOn = map[string]bool{}
+	}
+	s.probeOn[branch+"\x00"+target] = enabled
+	s.probeMu.Unlock()
+	return map[string]any{"ok": true}
 }
 
 func (s *Server) handleRenderProbe(w http.ResponseWriter, r *http.Request, branchLabel string) {

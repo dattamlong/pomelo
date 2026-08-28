@@ -72,6 +72,10 @@ final class MockPomAPI: PomAPI {
     private(set) var renderClearCalls = 0
     func renderSummaryData(branch: String, window: Int) -> Data { Data(renderSummaryJSON.utf8) }
     func renderClear(branch: String) -> Data { renderClearCalls += 1; return Data(#"{"ok":true}"#.utf8) }
+    var renderProbesJSON = #"{"probes":[]}"#
+    private(set) var renderSetProbeCalls: [(String, Bool)] = []
+    func renderProbesData(branch: String) -> Data { Data(renderProbesJSON.utf8) }
+    func renderSetProbe(branch: String, target: String, enabled: Bool) -> Data { renderSetProbeCalls.append((target, enabled)); return Data(#"{"ok":true}"#.utf8) }
     func prCommitsData(branch: String, repo: String, base: String, isMain: Bool) -> Data { Data(#"{"commits":[]}"#.utf8) }
     func prDiffData(branch: String, repo: String, isMain: Bool) -> Data { Data() }
     func jiraBoardsData() -> Data { Data(#"{"configured":false}"#.utf8) }

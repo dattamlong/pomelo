@@ -4,8 +4,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pomelohq/pomelo/internal/config"
 	"github.com/pomelohq/pomelo/internal/renderflow"
@@ -50,14 +53,73 @@ func TestInjectRenderProbeOnlyTouchesPlainHTML(t *testing.T) {
 }
 
 func TestServiceConfigResolvesAliasOrName(t *testing.T) {
+	on := true
 	cfg := &config.Config{Repos: map[string]*config.Dir{
-		"boompay-client": {Alias: "client", Services: map[string]*config.Service{"portal": {RenderProbe: true}}},
+		"boompay-client": {Alias: "client", Services: map[string]*config.Service{"portal": {RenderProbe: &on}}},
 	}}
-	if svc := serviceConfig(cfg, "client/portal"); svc == nil || !svc.RenderProbe {
+	if repo, svc := serviceConfig(cfg, "client/portal"); repo != "boompay-client" || svc == nil || svc.RenderProbe == nil || !*svc.RenderProbe {
 		t.Fatal("alias lookup failed")
 	}
-	if serviceConfig(cfg, "boompay-client/portal") == nil || serviceConfig(cfg, "client/nope") != nil || serviceConfig(cfg, "client") != nil {
-		t.Fatal("name/miss lookup wrong")
+	if _, svc := serviceConfig(cfg, "boompay-client/portal"); svc == nil {
+		t.Fatal("name lookup failed")
+	}
+	if _, svc := serviceConfig(cfg, "client/nope"); svc != nil {
+		t.Fatal("miss should be nil")
+	}
+	if _, svc := serviceConfig(cfg, "client"); svc != nil {
+		t.Fatal("no slash should be nil")
+	}
+}
+
+func TestDetectReactReadsPackageJSON(t *testing.T) {
+	dir := t.TempDir()
+	if detectReact(dir) {
+		t.Fatal("no package.json must be false")
+	}
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"dependencies":{"vue":"3"}}`), 0o644)
+	if detectReact(dir) {
+		t.Fatal("vue app must be false")
+	}
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"devDependencies":{"react":"^18"}}`), 0o644)
+	future := time.Now().Add(2 * time.Second)
+	os.Chtimes(filepath.Join(dir, "package.json"), future, future)
+	if !detectReact(dir) {
+		t.Fatal("react in devDependencies must be true")
+	}
+}
+
+func TestRenderProbePrecedence(t *testing.T) {
+	root := t.TempDir()
+	on, off := true, false
+	port := true
+	svcDir := filepath.Join(root, "workspace--feat", "client", "apps", "web")
+	os.MkdirAll(svcDir, 0o755)
+	os.WriteFile(filepath.Join(svcDir, "package.json"), []byte(`{"dependencies":{"react":"18"}}`), 0o644)
+	s := &Server{WorkspaceRoot: root, DefaultBranch: "main", renderFlow: renderflow.NewStore()}
+	s.cfgv.Store(&config.Config{Repos: map[string]*config.Dir{
+		"client": {Services: map[string]*config.Service{
+			"web":   {Dir: "apps/web", Port: &port},
+			"api":   {Dir: "apps/api", Port: &port},
+			"force": {Dir: "apps/api", Port: &port, RenderProbe: &on},
+			"never": {Dir: "apps/web", Port: &port, RenderProbe: &off},
+		}},
+	}})
+	if !s.renderProbeEnabled("feat", "client/web") {
+		t.Fatal("auto-detect should enable react service")
+	}
+	if s.renderProbeEnabled("feat", "client/api") {
+		t.Fatal("non-react service should be off")
+	}
+	if !s.renderProbeEnabled("feat", "client/force") || s.renderProbeEnabled("feat", "client/never") {
+		t.Fatal("config should override auto")
+	}
+	s.RenderSetProbe("feat", "client/never", true)
+	if !s.renderProbeEnabled("feat", "client/never") {
+		t.Fatal("manual toggle should override config")
+	}
+	probes := s.RenderProbes("feat")["probes"].([]ProbeInfo)
+	if len(probes) != 4 || probes[0].Target != "client/api" || probes[0].Enabled || probes[1].Source != "config" || probes[2].Source != "manual" || !probes[3].React {
+		t.Fatalf("probes: %+v", probes)
 	}
 }
 
