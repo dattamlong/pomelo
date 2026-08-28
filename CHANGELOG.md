@@ -6,6 +6,9 @@ All notable changes to Pomelo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- Images in Jira tickets, comments and PR descriptions open in a full-window viewer on click: filename and size, download, previous/next across the document's images, zoom controls and keyboard shortcuts (Esc, arrows, Cmd +/-/0).
+
 ## [0.3.6] - 2026-08-29
 
 ### Added
