@@ -89,6 +89,10 @@ struct WorkspacePaneInner: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var theme: ThemeManager
 
+    // Panes stay mounted once visited (opacity toggle) so switching panes/workspaces
+    // preserves their state instead of remounting — same idea as the workspace sidebar.
+    @State private var opened: Set<PaneKind> = []
+
     private var safeWs: String {
         workspace.id.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: ":", with: "-")
     }
@@ -99,8 +103,25 @@ struct WorkspacePaneInner: View {
             let maxDrawer = max(150, geo.size.height - footerH - 45)
             let drawerH: CGFloat = ps.terms.isEmpty ? 0 : (ps.drawerOpen ? min(ps.drawerHeight, maxDrawer) : 0)
             let contentH = max(0, geo.size.height - drawerH - footerH)
+            let active = effectivePane
             VStack(spacing: 0) {
-                content.frame(width: geo.size.width, height: contentH, alignment: .top).clipped()
+                // Every visited pane stays mounted (opacity toggle) so its state — the
+                // Review tab, the flow focus, terminal scrollback — survives pane and
+                // workspace switches instead of reloading.
+                ZStack {
+                    ForEach(PaneKind.allCases) { kind in
+                        if opened.contains(kind), kind != .claude || !workspace.isMain {
+                            paneView(kind, active: active == kind)
+                                .frame(width: geo.size.width, height: contentH, alignment: .top)
+                                .opacity(active == kind ? 1 : 0)
+                                .allowsHitTesting(active == kind)
+                                .zIndex(active == kind ? 1 : 0)
+                        }
+                    }
+                }
+                .frame(width: geo.size.width, height: contentH).clipped()
+                .onAppear { opened.insert(active) }
+                .onChange(of: ps.pane) { opened.insert(active) }
                 if !ps.terms.isEmpty {
                     TerminalDrawer(terms: $ps.terms, selected: $ps.selTerm, height: $ps.drawerHeight,
                                    maxHeight: maxDrawer, wsKey: workspace.id,
@@ -119,18 +140,23 @@ struct WorkspacePaneInner: View {
         navDisabled(ps.pane) ? .services : ps.pane
     }
 
-    @ViewBuilder private var content: some View {
-        switch effectivePane {
+    @ViewBuilder private func paneView(_ kind: PaneKind, active: Bool) -> some View {
+        switch kind {
         case .claude:
-            ClaudeTerminal(branch: workspace.branch, isMain: workspace.isMain, wsKey: workspace.id,
-                           onClose: { ps.pane = .services }).id("claude-\(safeWs)")
+            AgentTerminal(branch: workspace.branch, isMain: workspace.isMain, wsKey: workspace.id,
+                          onClose: { ps.pane = .services }).id("claude-\(safeWs)")
         case .services:
             ServicesBoard(workspace: workspace, openPane: { ps.pane = $0 }, openTerminal: attachLog,
                           onPrepareMain: { state.showPipeline = true })
         case .prs:    PRsBoard(workspace: workspace)
         case .jira:   JiraPane(workspace: workspace)
         case .database: DatabasePane(workspace: workspace).id("db-\(safeWs)")
-        case .review: ReviewPane(workspace: workspace)
+        case .review:
+            ReviewPane(workspace: workspace, isActive: active, onAskAgent: { text in
+                opened.insert(.claude)
+                StreamManager.shared.askClaude(wsKey: workspace.id, text: text)
+                withAnimation(.easeInOut(duration: 0.16)) { ps.pane = .claude }
+            })
         }
     }
 

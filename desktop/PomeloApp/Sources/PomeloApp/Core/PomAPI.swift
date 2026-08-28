@@ -94,6 +94,10 @@ protocol PRAPI: PomBaseAPI {
     func prDiffData(branch: String, repo: String, isMain: Bool) -> Data
     func reviewGetData(branch: String, isMain: Bool) -> Data
     func filePeekData(branch: String, repo: String, path: String, isMain: Bool) -> Data
+    func reviewThreadsData(branch: String, isMain: Bool) -> Data
+    func reviewThreadAdd(branch: String, isMain: Bool, repo: String, path: String, start: Int, end: Int, side: String, body: String) -> Data
+    func reviewThreadReply(branch: String, isMain: Bool, id: String, body: String) -> Data
+    func reviewThreadResolve(branch: String, isMain: Bool, id: String, resolved: Bool) -> Data
 }
 
 protocol JiraAPI: PomBaseAPI {

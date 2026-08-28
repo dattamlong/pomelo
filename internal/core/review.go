@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pomelohq/pomelo/internal/services"
 )
@@ -30,17 +31,33 @@ func (s *Server) ReviewGet(branch string, isMain bool) []byte {
 	return b
 }
 
-// FilePeek returns the working-tree contents of repo/path in a workspace so a code
-// anchor can show a peek without leaving the app. Path is confined to the worktree.
+// FilePeek returns the contents of repo/path so a code anchor can show a peek. It
+// reads the pushed head ref first (so it matches the PR even when the local worktree
+// is behind), then HEAD, then the working tree. Path is confined to the worktree.
 func (s *Server) FilePeek(branch, repo, path string, isMain bool) []byte {
 	if strings.Contains(path, "..") || filepath.IsAbs(path) {
 		return []byte(`{"error":"bad path"}`)
 	}
 	wt := repoWorktreePath(s.WorkspaceRoot, repo, branch, isMain)
-	b, err := os.ReadFile(filepath.Join(wt, path))
-	if err != nil {
-		return []byte(`{"error":"not found"}`)
+	var content string
+	refs := []string{}
+	if head := services.CurrentBranch(wt); head != "" {
+		refs = append(refs, "origin/"+head)
 	}
-	out, _ := json.Marshal(map[string]any{"repo": repo, "path": path, "content": string(b)})
+	refs = append(refs, "HEAD")
+	for _, ref := range refs {
+		if out, err := services.RunTimeout(6*time.Second, wt, "git", "show", ref+":"+path); err == nil {
+			content = string(out)
+			break
+		}
+	}
+	if content == "" { // last resort: the working tree
+		if b, err := os.ReadFile(filepath.Join(wt, path)); err == nil {
+			content = string(b)
+		} else {
+			return []byte(`{"error":"not found"}`)
+		}
+	}
+	out, _ := json.Marshal(map[string]any{"repo": repo, "path": path, "content": content})
 	return out
 }
