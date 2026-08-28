@@ -207,6 +207,7 @@ final class PomCore: @unchecked Sendable {
     func renderSummaryData(branch: String, window: Int) -> Data { query(domain: "render_summary", params: jp(["branch": branch, "window": window])) }
     func renderClear(branch: String) -> Data { command(domain: "render", action: "clear", params: jp(["branch": branch])) }
     func renderProbesData(branch: String) -> Data { query(domain: "render_probes", params: jp(["branch": branch])) }
+    func renderGraphData(branch: String, target: String, window: Int) -> Data { query(domain: "render_graph", params: jp(["branch": branch, "target": target, "window": window])) }
     func renderSetProbe(branch: String, target: String, enabled: Bool) -> Data { command(domain: "render", action: "set_probe", params: jp(["branch": branch, "target": target, "enabled": enabled])) }
     func localChangesData(branch: String, isMain: Bool) -> Data { fetch(domain: "local_changes", params: jp(["branch": branch, "is_main": isMain])) }
     func localDiffData(branch: String, repo: String, isMain: Bool) -> Data { fetch(domain: "local_diff", params: jp(["branch": branch, "repo": repo, "is_main": isMain]))

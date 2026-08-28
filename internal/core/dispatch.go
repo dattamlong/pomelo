@@ -147,6 +147,8 @@ func (s *Server) Query(domain string, params json.RawMessage) any {
 		return s.RenderSummary(pStr(params, "branch"), pInt(params, "window"))
 	case "render_probes":
 		return s.RenderProbes(pStr(params, "branch"))
+	case "render_graph":
+		return s.RenderGraph(pStr(params, "branch"), pStr(params, "target"), pInt(params, "window"))
 	case "pr_commits":
 		return s.PRCommits(pStr(params, "branch"), pStr(params, "repo"), pStr(params, "base"), pBool(params, "is_main"))
 	default:

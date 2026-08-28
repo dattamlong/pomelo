@@ -249,3 +249,62 @@ func (s *Server) RenderClear(branch string) map[string]any {
 	s.renderFlow.Clear(branch)
 	return map[string]any{"ok": true}
 }
+
+// Files the branch touched in a repo (base...HEAD), cached briefly: the graph
+// polls every second and git diff on a big monorepo is not free.
+func (s *Server) changedFiles(branch, repo string) map[string]bool {
+	key := branch + "\x00" + repo
+	s.probeMu.Lock()
+	if c, ok := s.changedCache[key]; ok && time.Since(c.at) < 10*time.Second {
+		s.probeMu.Unlock()
+		return c.files
+	}
+	s.probeMu.Unlock()
+	files := map[string]bool{}
+	isMain := branch == s.DefaultBranch
+	if !isMain {
+		wt := services.RepoWorktreePath(s.WorkspaceRoot, repo, branch, false)
+		base := services.BaseRef(s.cfg().DefaultBranchFor(repo), wt)
+		if out, err := services.RunTimeout(10*time.Second, wt, "git", "diff", "--name-only", base+"...HEAD"); err == nil {
+			for _, f := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+				if f != "" {
+					files[f] = true
+				}
+			}
+		}
+	}
+	s.probeMu.Lock()
+	if s.changedCache == nil {
+		s.changedCache = map[string]changedEntry{}
+	}
+	s.changedCache[key] = changedEntry{files: files, at: time.Now()}
+	s.probeMu.Unlock()
+	return files
+}
+
+type changedEntry struct {
+	files map[string]bool
+	at    time.Time
+}
+
+// RenderGraph scopes the propagation graph to components whose source file is
+// in the branch diff. Probe paths are absolute (Vite) so they are made relative
+// to the repo worktree before matching.
+func (s *Server) RenderGraph(branch, target string, windowS int) renderflow.Graph {
+	i := strings.IndexByte(target, '/')
+	if i < 0 {
+		return renderflow.Graph{Nodes: []renderflow.GraphNode{}, Edges: []renderflow.GraphEdge{}, Triggers: []string{}}
+	}
+	alias, svc := target[:i], target[i+1:]
+	repo, _ := serviceConfig(s.cfg(), target)
+	var changed func(*renderflow.Src) bool
+	if repo != "" {
+		files := s.changedFiles(branch, repo)
+		wt := services.RepoWorktreePath(s.WorkspaceRoot, repo, branch, branch == s.DefaultBranch) + "/"
+		changed = func(src *renderflow.Src) bool {
+			rel := strings.TrimPrefix(src.File, wt)
+			return files[rel]
+		}
+	}
+	return s.renderFlow.Graph(branch, alias, svc, time.Duration(windowS)*time.Second, renderflow.DefaultThresholds, changed)
+}

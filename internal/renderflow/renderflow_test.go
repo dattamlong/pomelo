@@ -95,3 +95,49 @@ func has(xs []string, x string) bool {
 	}
 	return false
 }
+
+func TestGraphScopesToChangedComponentsAndLayers(t *testing.T) {
+	now := time.UnixMilli(1_000_000)
+	s := fixedStore(now)
+	ms := now.UnixMilli()
+	src := func(f string) *Src { return &Src{File: f, Line: 1} }
+	s.Ingest("feat", "client", "portal", Batch{Commits: []Commit{{T: ms - 100, Trigger: "click \"Save\"", Renders: []Render{
+		{I: 0, P: -1, Name: "Page", Self: 1, Why: "state", Src: src("/wt/src/Page.tsx")},
+		{I: 1, P: 0, Name: "Card", Self: 0.2, Why: "parent", Wasted: true, Src: src("/wt/src/Card.tsx")},
+		{I: 2, P: 1, Name: "te$1", Self: 0, Why: "parent", Wasted: true},
+		{I: 3, P: 1, Name: "Switch", Self: 0.1, Why: "props:checked", Src: src("/wt/src/Switch.tsx")},
+		{I: 4, P: 0, Name: "Sidebar", Self: 0.3, Why: "parent", Wasted: true, Src: src("/wt/src/Sidebar.tsx")},
+		{I: 5, P: 4, Name: "NavLink", Self: 0, Why: "parent", Wasted: true, Src: src("/wt/src/NavLink.tsx")},
+	}}}})
+	changed := func(x *Src) bool { return x.File == "/wt/src/Card.tsx" }
+	g := s.Graph("feat", "client", "portal", 10*time.Second, DefaultThresholds, changed)
+	if !g.Scoped || g.Commits != 1 || len(g.Triggers) != 1 {
+		t.Fatalf("graph meta: %+v", g)
+	}
+	names := map[string]GraphNode{}
+	for _, n := range g.Nodes {
+		names[n.Name] = n
+	}
+	if _, ok := names["Sidebar"]; ok {
+		t.Fatal("Sidebar is unrelated to the change and must be dropped")
+	}
+	if _, ok := names["te$1"]; ok {
+		t.Fatal("vendor neighbour must be dropped")
+	}
+	if !names["Card"].Changed || names["Page"].Changed || names["Switch"].Changed {
+		t.Fatalf("changed flags: %+v", g.Nodes)
+	}
+	if names["Page"].Depth != 0 || names["Card"].Depth != 1 || names["Switch"].Depth != 2 {
+		t.Fatalf("depths: %+v", g.Nodes)
+	}
+	if len(g.Edges) != 2 || g.Edges[0].From != "Card" || g.Edges[1].From != "Page" {
+		t.Fatalf("edges: %+v", g.Edges)
+	}
+	all := s.Graph("feat", "client", "portal", 10*time.Second, DefaultThresholds, func(*Src) bool { return false })
+	if all.Scoped || len(all.Nodes) != 5 {
+		t.Fatalf("unscoped fallback should keep every non-vendor node: %+v", all.Nodes)
+	}
+	if empty := s.Graph("other", "client", "portal", 0, DefaultThresholds, nil); empty.Nodes == nil || empty.Edges == nil || empty.Triggers == nil {
+		t.Fatal("empty graph must marshal arrays, not null")
+	}
+}

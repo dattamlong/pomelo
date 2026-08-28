@@ -8,6 +8,20 @@
   var MAX_RENDERS = 200, MAX_COMMITS = 50, FLUSH_MS = 500;
   var PerformedWork = 1;
   var pending = [], truncated = false, probeMs = 0, timer = null;
+  var lastEvent = "load";
+  function label(el) {
+    if (!el || !el.getAttribute) return "";
+    var t = el.getAttribute("aria-label") || el.getAttribute("placeholder") || el.getAttribute("name") || (el.innerText || "").trim();
+    t = t.replace(/\s+/g, " ");
+    return t.length > 40 ? t.slice(0, 40) + "…" : t;
+  }
+  ["click", "input", "keydown", "change", "submit"].forEach(function (ev) {
+    document.addEventListener(ev, function (e) {
+      var el = e.target;
+      for (var i = 0; i < 4 && el && !label(el); i++) el = el.parentElement;
+      lastEvent = ev + (label(el) ? ' "' + label(el) + '"' : "");
+    }, true);
+  });
 
   function nameOf(fiber) {
     var t = fiber.type;
@@ -38,36 +52,37 @@
     return false;
   }
   function walk(root) {
-    var out = [], byName = {};
-    var stack = [root.current.child];
+    var out = [];
+    var stack = [{ f: root.current.child, p: -1 }];
     while (stack.length) {
-      var f = stack.pop();
+      var it = stack.pop(), f = it.f;
       if (!f) continue;
-      if (f.sibling) stack.push(f.sibling);
-      if (f.child) stack.push(f.child);
-      if (!(f.flags & PerformedWork) && !(f.effectTag & PerformedWork)) continue;
-      var name = nameOf(f);
-      if (!name || typeof f.type === "string") continue;
-      var self = f.actualDuration || 0;
-      for (var c = f.child; c; c = c.sibling) self -= c.actualDuration || 0;
-      if (self < 0) self = 0;
-      var why = "mount", wasted = false, alt = f.alternate;
-      if (alt) {
-        var props = shallowDiff(alt.memoizedProps, f.memoizedProps);
-        if (props) why = "props:" + props;
-        else if (stateChanged(f, alt)) why = "state";
-        else { why = "parent"; wasted = true; }
+      if (f.sibling) stack.push({ f: f.sibling, p: it.p });
+      var parent = it.p;
+      var rendered = (f.flags & PerformedWork) || (f.effectTag & PerformedWork);
+      var name = rendered ? nameOf(f) : null;
+      if (name && typeof f.type !== "string") {
+        var self = f.actualDuration || 0;
+        for (var c = f.child; c; c = c.sibling) self -= c.actualDuration || 0;
+        if (self < 0) self = 0;
+        var why = "mount", wasted = false, alt = f.alternate;
+        if (alt) {
+          var props = shallowDiff(alt.memoizedProps, f.memoizedProps);
+          if (props) why = "props:" + props;
+          else if (stateChanged(f, alt)) why = "state";
+          else { why = "parent"; wasted = true; }
+        }
+        if (out.length >= MAX_RENDERS) { truncated = true; }
+        else {
+          var e = { i: out.length, p: parent, name: name, self: Math.round(self * 100) / 100, why: why, wasted: wasted, count: 1 };
+          var src = f._debugSource;
+          if (src && src.fileName) e.src = { file: src.fileName, line: src.lineNumber || 0 };
+          out.push(e);
+          parent = e.i;
+        }
       }
-      var key = name + "|" + why;
-      var e = byName[key];
-      if (e) { e.count++; e.self += self; continue; }
-      if (out.length >= MAX_RENDERS) { truncated = true; continue; }
-      e = { name: name, self: Math.round(self * 100) / 100, why: why, wasted: wasted, count: 1 };
-      var src = f._debugSource;
-      if (src && src.fileName) e.src = { file: src.fileName, line: src.lineNumber || 0 };
-      byName[key] = e; out.push(e);
+      if (f.child) stack.push({ f: f.child, p: parent });
     }
-    for (var i = 0; i < out.length; i++) out[i].self = Math.round(out[i].self * 100) / 100;
     return out;
   }
   function onCommit(rendererID, root) {
@@ -76,7 +91,7 @@
       var renders = walk(root);
       if (renders.length) {
         if (pending.length >= MAX_COMMITS) { truncated = true; pending.shift(); }
-        pending.push({ t: Date.now(), dur: Math.round((root.current.actualDuration || 0) * 100) / 100, renders: renders });
+        pending.push({ t: Date.now(), dur: Math.round((root.current.actualDuration || 0) * 100) / 100, trigger: lastEvent, path: location.pathname, renders: renders });
       }
     } catch (e) { /* never break the app */ }
     probeMs += performance.now() - t0;

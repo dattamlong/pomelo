@@ -101,6 +101,7 @@ protocol PRAPI: PomBaseAPI {
     func renderSummaryData(branch: String, window: Int) -> Data
     func renderClear(branch: String) -> Data
     func renderProbesData(branch: String) -> Data
+    func renderGraphData(branch: String, target: String, window: Int) -> Data
     func renderSetProbe(branch: String, target: String, enabled: Bool) -> Data
 }
 

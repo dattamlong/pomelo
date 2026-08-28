@@ -37,10 +37,11 @@ type Server struct {
 	modeMu        sync.Mutex
 	modeOverrides map[string]string
 
-	proxyLog   proxyLog
-	renderFlow *renderflow.Store
-	probeMu    sync.Mutex
-	probeOn    map[string]bool // branch\x00repo/svc manual override
+	proxyLog     proxyLog
+	renderFlow   *renderflow.Store
+	probeMu      sync.Mutex
+	probeOn      map[string]bool // branch\x00repo/svc manual override
+	changedCache map[string]changedEntry
 
 	dpOnce sync.Once
 	dp     *httputil.ReverseProxy
@@ -63,9 +64,9 @@ type Server struct {
 	resMu   sync.Mutex
 	resStat commands.ResourceStat
 
-	syncNextAt   atomic.Int64  // unix seconds of the next scheduled main refresh; 0 = none
-	syncPulling  atomic.Bool   // a refresh is running right now
-	syncLastPull atomic.Int64  // unix seconds when the last refresh finished
+	syncNextAt   atomic.Int64 // unix seconds of the next scheduled main refresh; 0 = none
+	syncPulling  atomic.Bool  // a refresh is running right now
+	syncLastPull atomic.Int64 // unix seconds when the last refresh finished
 	syncProg     atomic.Pointer[[]RepoPull]
 	syncReset    chan struct{} // poked by SyncSet to reschedule immediately
 }

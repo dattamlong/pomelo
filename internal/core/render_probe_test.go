@@ -142,3 +142,15 @@ func TestHandleRenderProbeServesScriptAndIngests(t *testing.T) {
 		t.Fatalf("bad target: %d", rec.Code)
 	}
 }
+
+func TestRenderGraphUnknownTargetIsEmptyNotNull(t *testing.T) {
+	s := &Server{WorkspaceRoot: t.TempDir(), DefaultBranch: "main", renderFlow: renderflow.NewStore()}
+	s.cfgv.Store(&config.Config{})
+	g := s.RenderGraph("feat", "nope", 10)
+	if g.Nodes == nil || g.Edges == nil || g.Triggers == nil || len(g.Nodes) != 0 {
+		t.Fatalf("graph: %+v", g)
+	}
+	if files := s.changedFiles("main", "r"); files == nil || len(files) != 0 {
+		t.Fatalf("main has no diff: %v", files)
+	}
+}

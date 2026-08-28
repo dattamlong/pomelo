@@ -75,6 +75,8 @@ final class MockPomAPI: PomAPI {
     var renderProbesJSON = #"{"probes":[]}"#
     private(set) var renderSetProbeCalls: [(String, Bool)] = []
     func renderProbesData(branch: String) -> Data { Data(renderProbesJSON.utf8) }
+    var renderGraphJSON = #"{"repo":"","svc":"","window_s":10,"commits":0,"scoped":false,"nodes":[],"edges":[],"triggers":[]}"#
+    func renderGraphData(branch: String, target: String, window: Int) -> Data { Data(renderGraphJSON.utf8) }
     func renderSetProbe(branch: String, target: String, enabled: Bool) -> Data { renderSetProbeCalls.append((target, enabled)); return Data(#"{"ok":true}"#.utf8) }
     func prCommitsData(branch: String, repo: String, base: String, isMain: Bool) -> Data { Data(#"{"commits":[]}"#.utf8) }
     func prDiffData(branch: String, repo: String, isMain: Bool) -> Data { Data() }

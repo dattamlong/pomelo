@@ -47,6 +47,21 @@ final class RenderFlowViewModelTests: XCTestCase {
         XCTAssertTrue(mock.renderSetProbeCalls[0].1)
     }
 
+    func testGraphLoadsPerTargetAndPulsesGrowth() async {
+        let mock = MockPomAPI()
+        mock.renderSummaryJSON = #"{"window_s":10,"targets":[{"repo":"client","svc":"portal","commits":2,"components":[]}]}"#
+        mock.renderGraphJSON = #"{"repo":"client","svc":"portal","window_s":10,"commits":2,"scoped":true,"nodes":[{"name":"Page","renders":2,"depth":0,"changed":false},{"name":"Card","renders":2,"depth":1,"changed":true,"flags":["wasted"]}],"edges":[{"from":"Page","to":"Card","count":2}],"triggers":["click \"Save\""]}"#
+        let vm = RenderFlowViewModel(api: mock)
+        await vm.load(branch: "feat")
+        let g = vm.graphs["client/portal"]
+        XCTAssertEqual(g?.nodes.count, 2)
+        XCTAssertEqual(g?.edges.first?.count, 2)
+        XCTAssertTrue(g?.scoped ?? false)
+        XCTAssertTrue(vm.pulsing.contains("client/portal|Card"), "first sight counts as growth")
+        await vm.load(branch: "feat")
+        XCTAssertTrue(vm.pulsing.isEmpty, "unchanged counts do not pulse")
+    }
+
     func testClearResetsAndCallsCore() async {
         let mock = MockPomAPI()
         let vm = RenderFlowViewModel(api: mock)
