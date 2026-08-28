@@ -98,6 +98,8 @@ protocol PRAPI: PomBaseAPI {
     func reviewThreadAdd(branch: String, isMain: Bool, repo: String, path: String, start: Int, end: Int, side: String, body: String) -> Data
     func reviewThreadReply(branch: String, isMain: Bool, id: String, body: String) -> Data
     func reviewThreadResolve(branch: String, isMain: Bool, id: String, resolved: Bool) -> Data
+    func renderSummaryData(branch: String, window: Int) -> Data
+    func renderClear(branch: String) -> Data
 }
 
 protocol JiraAPI: PomBaseAPI {

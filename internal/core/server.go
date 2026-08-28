@@ -20,6 +20,7 @@ import (
 	"github.com/pomelohq/pomelo/internal/plugin"
 	"github.com/pomelohq/pomelo/internal/provider/forge"
 	"github.com/pomelohq/pomelo/internal/provider/tracker"
+	"github.com/pomelohq/pomelo/internal/renderflow"
 	"github.com/pomelohq/pomelo/internal/services"
 )
 
@@ -36,7 +37,8 @@ type Server struct {
 	modeMu        sync.Mutex
 	modeOverrides map[string]string
 
-	proxyLog proxyLog
+	proxyLog   proxyLog
+	renderFlow *renderflow.Store
 
 	dpOnce sync.Once
 	dp     *httputil.ReverseProxy
@@ -88,6 +90,7 @@ func New(addr, project, workspaceRoot, defaultBranch string, cfg *config.Config)
 	s.pr = forge.New(s.cfg, workspaceRoot, defaultBranch)
 	s.activity = newActivityFeature(s.cfg, workspaceRoot, defaultBranch)
 	s.git = &gitFeature{WorkspaceRoot: workspaceRoot}
+	s.renderFlow = renderflow.NewStore()
 	return s
 }
 

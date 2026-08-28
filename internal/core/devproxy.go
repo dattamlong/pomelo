@@ -22,6 +22,7 @@ type proxyCtxKey int
 const (
 	proxyTargetKey proxyCtxKey = iota
 	proxyPrefixKey
+	proxyProbeKey
 	proxyExtURLKey
 )
 
@@ -65,10 +66,17 @@ func (s *Server) devProxy() *httputil.ReverseProxy {
 				host, _ := req.Context().Value(proxyTargetKey).(string)
 				req.URL.Scheme = "http"
 				req.URL.Host = host
+				// Identity encoding so the probe can be spliced into HTML.
+				if probe, _ := req.Context().Value(proxyProbeKey).(string); probe != "" && wantsHTML(req) {
+					req.Header.Del("Accept-Encoding")
+				}
 			},
 			ModifyResponse: func(resp *http.Response) error {
 				prefix, _ := resp.Request.Context().Value(proxyPrefixKey).(string)
 				rewriteSetCookie(resp, prefix)
+				if probe, _ := resp.Request.Context().Value(proxyProbeKey).(string); probe != "" {
+					return injectRenderProbe(resp, probe)
+				}
 				return nil
 			},
 			ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
@@ -213,6 +221,11 @@ func (s *Server) handleDevProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	branchLabel := labels[len(labels)-1]
+
+	if strings.HasPrefix(r.URL.Path, renderProbePrefix) {
+		s.handleRenderProbe(w, r, branchLabel)
+		return
+	}
 
 	if bePath := strings.TrimPrefix(r.URL.Path, "/_pom_dev/"); bePath != r.URL.Path {
 		parts := strings.SplitN(bePath, "/", 3)
@@ -408,5 +421,8 @@ func (s *Server) proxyToWorkspaceService(w http.ResponseWriter, r *http.Request,
 	}
 	host := services.BindIP() + ":" + strconv.Itoa(port)
 	ctx := context.WithValue(r.Context(), proxyTargetKey, host)
+	if s.renderProbeEnabled(target) {
+		ctx = context.WithValue(ctx, proxyProbeKey, target)
+	}
 	s.devProxy().ServeHTTP(w, r.WithContext(ctx))
 }

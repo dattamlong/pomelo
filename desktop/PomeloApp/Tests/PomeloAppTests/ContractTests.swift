@@ -31,6 +31,14 @@ final class ContractTests: XCTestCase {
         XCTAssertEqual(ws?.repos.count, 0)
     }
 
+    // renderflow.Summary: targets/components/flags are always [] (never null); src omitempty.
+    func testRenderSummaryShapes() {
+        XCTAssertEqual(decode(RenderSummary.self, #"{"window_s":10,"targets":[]}"#)?.targets.count, 0)
+        let t = decode(RenderSummary.self,
+            #"{"window_s":30,"targets":[{"repo":"r","svc":"s","commits":0,"truncated":false,"probe_ms":0,"last_seen":0,"components":[]}]}"#)
+        XCTAssertEqual(t?.targets.first?.components.count, 0)
+    }
+
     func testWorkspacesResponseEmpty() {
         XCTAssertEqual(decode(WorkspacesResponse.self, #"{"workspaces":[]}"#)?.workspaces.count, 0)
     }

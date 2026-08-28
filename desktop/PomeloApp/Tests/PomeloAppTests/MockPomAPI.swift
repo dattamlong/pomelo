@@ -68,6 +68,10 @@ final class MockPomAPI: PomAPI {
     func reviewThreadAdd(branch: String, isMain: Bool, repo: String, path: String, start: Int, end: Int, side: String, body: String) -> Data { Data(#"{"ok":true}"#.utf8) }
     func reviewThreadReply(branch: String, isMain: Bool, id: String, body: String) -> Data { Data(#"{"ok":true}"#.utf8) }
     func reviewThreadResolve(branch: String, isMain: Bool, id: String, resolved: Bool) -> Data { Data(#"{"ok":true}"#.utf8) }
+    var renderSummaryJSON = #"{"window_s":10,"targets":[]}"#
+    private(set) var renderClearCalls = 0
+    func renderSummaryData(branch: String, window: Int) -> Data { Data(renderSummaryJSON.utf8) }
+    func renderClear(branch: String) -> Data { renderClearCalls += 1; return Data(#"{"ok":true}"#.utf8) }
     func prCommitsData(branch: String, repo: String, base: String, isMain: Bool) -> Data { Data(#"{"commits":[]}"#.utf8) }
     func prDiffData(branch: String, repo: String, isMain: Bool) -> Data { Data() }
     func jiraBoardsData() -> Data { Data(#"{"configured":false}"#.utf8) }

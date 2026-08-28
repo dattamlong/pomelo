@@ -184,7 +184,7 @@ struct ReviewPane: View {
     @State private var focusedStep: Int?
     @AppStorage("review.previewWidth") private var previewWidth = 520.0
 
-    private enum DocTab { case doc, diagram }
+    private enum DocTab { case doc, diagram, render }
 
     // The agent runs per-workspace (Cmd-I); main has none, so Ask is hidden there.
     private var canAsk: Bool { !workspace.isMain }
@@ -192,8 +192,12 @@ struct ReviewPane: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            docPane.frame(maxWidth: .infinity, maxHeight: .infinity)
-            rightPane
+            VStack(spacing: 0) {
+                docTabBar
+                if docTab == .render { RenderFlowView(workspace: workspace) } else { docPane }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if docTab != .render { rightPane }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.bg)
@@ -237,7 +241,6 @@ struct ReviewPane: View {
     @ViewBuilder private var docPane: some View {
         if let r = review, r.exists {
             VStack(spacing: 0) {
-                if r.diagram?.hasContent == true { docTabBar }
                 if docTab == .diagram, let dg = r.diagram, dg.hasContent {
                     DiagramView(diagram: dg, focused: focusedStep, onSelectStep: { focusedStep = $0 })
                 } else {
@@ -332,7 +335,8 @@ struct ReviewPane: View {
     private var docTabBar: some View {
         HStack(spacing: 6) {
             docTabBtn("Narrative", "doc.text", .doc)
-            docTabBtn("Flow", "arrow.triangle.branch", .diagram)
+            if review?.diagram?.hasContent == true { docTabBtn("Flow", "arrow.triangle.branch", .diagram) }
+            docTabBtn("Render", "waveform.path.ecg", .render)
             Spacer()
         }
         .padding(.horizontal, 16).padding(.vertical, 8)

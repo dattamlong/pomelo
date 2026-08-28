@@ -143,6 +143,8 @@ func (s *Server) Query(domain string, params json.RawMessage) any {
 		return map[string]any{"name": name, "value": s.SecretGet(name)}
 	case "devproxy_log":
 		return s.DevProxyLog(pInt(params, "limit"))
+	case "render_summary":
+		return s.RenderSummary(pStr(params, "branch"), pInt(params, "window"))
 	case "pr_commits":
 		return s.PRCommits(pStr(params, "branch"), pStr(params, "repo"), pStr(params, "base"), pBool(params, "is_main"))
 	default:
@@ -190,6 +192,11 @@ func (s *Server) Command(domain, action string, params json.RawMessage) any {
 		if action == "refresh" {
 			return s.PRRefresh()
 		}
+	case "render":
+		if action == "clear" {
+			return s.RenderClear(pStr(params, "branch"))
+		}
+		return map[string]any{"ok": false, "error": "unknown render action " + action}
 	case "review":
 		switch action {
 		case "thread_add":
