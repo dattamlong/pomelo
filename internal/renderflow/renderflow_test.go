@@ -74,6 +74,19 @@ func TestRingCap(t *testing.T) {
 	}
 }
 
+func TestIsVendor(t *testing.T) {
+	cases := map[string]bool{"LeadTable": false, "Card": false, "Show": false, "Anonymous": false,
+		"te$1": true, "eo": true, "O0": true, "s$6": true, "i2": true, "Svg": false}
+	for n, want := range cases {
+		if got := isVendor(n, nil); got != want {
+			t.Errorf("%q vendor=%v want %v", n, got, want)
+		}
+	}
+	if !isVendor("Button", &Src{File: "/x/node_modules/lib/Button.js"}) || isVendor("te$1", &Src{File: "/x/src/a.tsx"}) {
+		t.Error("src path must decide when present")
+	}
+}
+
 func has(xs []string, x string) bool {
 	for _, v := range xs {
 		if v == x {

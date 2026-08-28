@@ -32,7 +32,7 @@ struct RenderTarget: Decodable, Equatable, Identifiable {
 
 struct RenderComponent: Decodable, Equatable, Identifiable {
     struct Src: Decodable, Equatable { var file = ""; var line = 0 }
-    var name = ""; var renders = 0; var wasted = 0; var selfAvg = 0.0; var selfMax = 0.0
+    var name = ""; var vendor = false; var renders = 0; var wasted = 0; var selfAvg = 0.0; var selfMax = 0.0
     var why: [String: Int] = [:]; var flags: [String] = []; var src: Src?
     var id: String { name }
     var wastedPct: Int { renders > 0 ? Int((Double(wasted) / Double(renders) * 100).rounded()) : 0 }
@@ -40,6 +40,7 @@ struct RenderComponent: Decodable, Equatable, Identifiable {
     init(from d: Decoder) throws {
         let c = try d.container(keyedBy: K.self)
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        vendor = try c.decodeIfPresent(Bool.self, forKey: .vendor) ?? false
         renders = try c.decodeIfPresent(Int.self, forKey: .renders) ?? 0
         wasted = try c.decodeIfPresent(Int.self, forKey: .wasted) ?? 0
         selfAvg = try c.decodeIfPresent(Double.self, forKey: .selfAvg) ?? 0
@@ -48,7 +49,7 @@ struct RenderComponent: Decodable, Equatable, Identifiable {
         flags = try c.decodeIfPresent([String].self, forKey: .flags) ?? []
         src = try c.decodeIfPresent(Src.self, forKey: .src)
     }
-    enum K: String, CodingKey { case name, renders, wasted, selfAvg = "self_avg", selfMax = "self_max", why, flags, src }
+    enum K: String, CodingKey { case name, vendor, renders, wasted, selfAvg = "self_avg", selfMax = "self_max", why, flags, src }
 }
 
 struct RenderProbe: Decodable, Equatable, Identifiable {
@@ -81,6 +82,7 @@ final class RenderFlowViewModel: ObservableObject {
     @Published private(set) var probes: [RenderProbe] = []
     @Published private(set) var loaded = false
     @Published var window = 10
+    @Published var showVendor = false
 
     private let api: PRAPI
     init(api: PRAPI = PomCore.shared) { self.api = api }
@@ -88,6 +90,8 @@ final class RenderFlowViewModel: ObservableObject {
     var hasData: Bool { summary.targets.contains { $0.commits > 0 } }
     var probeSeen: Bool { !summary.targets.isEmpty }
     var enabledProbes: [RenderProbe] { probes.filter(\.enabled) }
+    func visible(_ t: RenderTarget) -> [RenderComponent] { showVendor ? t.components : t.components.filter { !$0.vendor } }
+    func hiddenCount(_ t: RenderTarget) -> Int { t.components.filter(\.vendor).count }
 
     func load(branch: String) async {
         let d = await api.call { $0.renderSummaryData(branch: branch, window: self.window) }
@@ -150,6 +154,9 @@ struct RenderFlowView: View {
             Text("RENDERS").font(.system(size: 10.5, weight: .semibold)).kerning(0.6).foregroundStyle(Theme.muted)
             Text("last \(vm.summary.windowS)s").font(Theme.mono(10.5)).foregroundStyle(Theme.dim)
             Spacer()
+            Toggle("Library", isOn: $vm.showVendor).toggleStyle(.checkbox).controlSize(.small)
+                .font(.system(size: 11)).foregroundStyle(Theme.fgMuted)
+                .help("Show components from node_modules (minified names you cannot change)")
             Picker("", selection: $vm.window) {
                 Text("10s").tag(10); Text("30s").tag(30); Text("2m").tag(120)
             }.pickerStyle(.segmented).frame(width: 150).controlSize(.small)
@@ -213,10 +220,16 @@ struct RenderFlowView: View {
                 Spacer()
                 Text("probe \(fmt(t.probeMs)) ms").font(Theme.mono(10)).foregroundStyle(Theme.dim)
             }
-            if t.components.isEmpty {
-                Text("No component renders in this window.").font(.system(size: 12)).foregroundStyle(Theme.dim)
+            let rows = vm.visible(t)
+            if rows.isEmpty {
+                Text(t.components.isEmpty ? "No component renders in this window."
+                     : "Only library components rendered (\(vm.hiddenCount(t)) hidden).")
+                    .font(.system(size: 12)).foregroundStyle(Theme.dim)
             } else {
-                table(t.components)
+                table(rows)
+                if !vm.showVendor, vm.hiddenCount(t) > 0 {
+                    Text("\(vm.hiddenCount(t)) library components hidden").font(.system(size: 10.5)).foregroundStyle(Theme.dim)
+                }
             }
         }
     }
@@ -235,7 +248,7 @@ struct RenderFlowView: View {
                     cell(c.wasted > 0 ? "\(c.wastedPct)%" : "–", 70, tint: c.wasted * 2 >= c.renders && c.wasted > 0 ? Theme.warn : nil)
                     cell(fmt(c.selfAvg), 70)
                     cell(fmt(c.selfMax), 70, tint: c.flags.contains("slow") ? Theme.danger : nil)
-                    Text(c.topWhy).font(Theme.mono(10.5)).foregroundStyle(Theme.fgMuted).frame(width: 80, alignment: .leading)
+                    Text(c.topWhy).font(Theme.mono(10.5)).foregroundStyle(Theme.fgMuted).frame(width: 80, alignment: .leading).padding(.leading, 14)
                 }
                 .padding(.horizontal, 10).padding(.vertical, 6)
                 Divider().overlay(Theme.borderSoft.opacity(0.5))
@@ -252,7 +265,7 @@ struct RenderFlowView: View {
             Text(wasted).frame(width: 70, alignment: .trailing)
             Text(avg).frame(width: 70, alignment: .trailing)
             Text(max).frame(width: 70, alignment: .trailing)
-            Text(why).frame(width: 80, alignment: .leading).padding(.leading, 10)
+            Text(why).frame(width: 80, alignment: .leading).padding(.leading, 14)
         }
         .font(.system(size: 10, weight: .semibold)).kerning(0.5).foregroundStyle(Theme.muted)
         .padding(.horizontal, 10).padding(.vertical, 6)

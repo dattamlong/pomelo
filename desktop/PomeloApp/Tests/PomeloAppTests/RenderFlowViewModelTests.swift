@@ -7,7 +7,8 @@ final class RenderFlowViewModelTests: XCTestCase {
         let mock = MockPomAPI()
         mock.renderSummaryJSON = #"""
         {"window_s":10,"targets":[{"repo":"client","svc":"portal","commits":3,"truncated":false,"probe_ms":1.5,"last_seen":1,
-          "components":[{"name":"LeadTable","renders":4,"wasted":3,"self_avg":11,"self_max":20,"why":{"parent":3,"state":1},"flags":["slow","wasted"]}]}]}
+          "components":[{"name":"LeadTable","renders":4,"wasted":3,"self_avg":11,"self_max":20,"why":{"parent":3,"state":1},"flags":["slow","wasted"]},
+                        {"name":"te$1","vendor":true,"renders":9,"wasted":9,"self_avg":0,"self_max":0,"why":{"parent":9},"flags":["wasted"]}]}]}
         """#
         let vm = RenderFlowViewModel(api: mock)
         await vm.load(branch: "feat")
@@ -18,6 +19,11 @@ final class RenderFlowViewModelTests: XCTestCase {
         XCTAssertEqual(c.topWhy, "parent")
         XCTAssertEqual(c.flags, ["slow", "wasted"])
         XCTAssertNil(c.src)
+        let t = vm.summary.targets[0]
+        XCTAssertEqual(vm.visible(t).map(\.name), ["LeadTable"], "vendor hidden by default")
+        XCTAssertEqual(vm.hiddenCount(t), 1)
+        vm.showVendor = true
+        XCTAssertEqual(vm.visible(t).count, 2)
     }
 
     func testEmptyTargetsMeansNoProbe() async {

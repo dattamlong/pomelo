@@ -5,6 +5,7 @@ package renderflow
 import (
 	_ "embed"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -93,6 +94,7 @@ func (s *Store) Clear(branch string) {
 
 type Component struct {
 	Name     string         `json:"name"`
+	Vendor   bool           `json:"vendor"`
 	Renders  int            `json:"renders"`
 	Wasted   int            `json:"wasted"`
 	SelfAvg  float64        `json:"self_avg"`
@@ -191,6 +193,7 @@ func (t *target) summary(since int64, window time.Duration, thr Thresholds) Targ
 			c.SelfAvg = round2(a.selfSum / float64(c.Renders))
 		}
 		c.SelfMax = round2(c.SelfMax)
+		c.Vendor = isVendor(c.Name, c.Src)
 		if c.SelfMax >= thr.SlowMs {
 			c.Flags = append(c.Flags, "slow")
 		}
@@ -213,6 +216,27 @@ func (t *target) summary(since int64, window time.Duration, thr Thresholds) Targ
 	})
 	return Target{Repo: t.repo, Svc: t.svc, Commits: commits, Truncated: t.truncated, ProbeMs: round2(t.probeMs),
 		LastSeen: t.lastSeen.UnixMilli(), Components: comps}
+}
+
+// Library code: pre-bundled deps report node_modules paths or minified names
+// (te$1, eo, O0). Users cannot fix those, so the UI hides them by default.
+func isVendor(name string, src *Src) bool {
+	if src != nil && src.File != "" {
+		return strings.Contains(src.File, "/node_modules/")
+	}
+	if name == "" || name == "Anonymous" {
+		return false
+	}
+	if strings.ContainsAny(name, "$") {
+		return true
+	}
+	if len(name) <= 2 {
+		return true
+	}
+	if len(name) <= 4 && strings.ContainsAny(name, "0123456789") {
+		return true
+	}
+	return false
 }
 
 // "props:a,b" collapses to "props" so the histogram stays small.
