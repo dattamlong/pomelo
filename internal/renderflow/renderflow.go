@@ -129,11 +129,8 @@ type Summary struct {
 func (s *Store) Summary(branch string, window time.Duration, thr Thresholds) Summary {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if window <= 0 {
-		window = 10 * time.Second
-	}
-	since := s.now().Add(-window).UnixMilli()
-	out := Summary{WindowS: int(window / time.Second), Targets: []Target{}}
+	since, windowS := s.windowSince(&window)
+	out := Summary{WindowS: windowS, Targets: []Target{}}
 	for k, t := range s.targets {
 		if len(k) <= len(branch) || k[:len(branch)+1] != branch+"\x00" {
 			continue
@@ -243,6 +240,20 @@ func isVendor(name string, src *Src) bool {
 	return false
 }
 
+// window < 0 means everything captured since the last clear (window_s = -1);
+// 0 falls back to 10s. "Hot" scales with the window, so an all-time view uses
+// the span actually captured.
+func (s *Store) windowSince(window *time.Duration) (since int64, windowS int) {
+	if *window < 0 {
+		*window = 10 * time.Second
+		return 0, -1
+	}
+	if *window == 0 {
+		*window = 10 * time.Second
+	}
+	return s.now().Add(-*window).UnixMilli(), int(*window / time.Second)
+}
+
 // "props:a,b" collapses to "props" so the histogram stays small.
 func whyKind(w string) string {
 	for i := 0; i < len(w); i++ {
@@ -299,15 +310,12 @@ type Graph struct {
 func (s *Store) Graph(branch, repo, svc string, window time.Duration, thr Thresholds, changed func(*Src) bool) Graph {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if window <= 0 {
-		window = 10 * time.Second
-	}
-	g := Graph{Repo: repo, Svc: svc, WindowS: int(window / time.Second), Nodes: []GraphNode{}, Edges: []GraphEdge{}, Triggers: []string{}}
+	since, windowS := s.windowSince(&window)
+	g := Graph{Repo: repo, Svc: svc, WindowS: windowS, Nodes: []GraphNode{}, Edges: []GraphEdge{}, Triggers: []string{}}
 	t := s.targets[branch+"\x00"+repo+"/"+svc]
 	if t == nil {
 		return g
 	}
-	since := s.now().Add(-window).UnixMilli()
 	nodes := map[string]*GraphNode{}
 	edges := map[[2]string]int{}
 	seenTrig := map[string]bool{}
@@ -350,22 +358,23 @@ func (s *Store) Graph(branch, repo, svc string, window time.Duration, thr Thresh
 		}
 	}
 	keep := map[string]bool{}
-	anyChanged := false
+	isChanged := map[string]bool{}
 	for name, n := range nodes {
 		n.Vendor = isVendor(n.Name, n.Src)
 		if changed != nil && n.Src != nil && changed(n.Src) {
 			n.Changed = true
-			anyChanged = true
+			isChanged[name] = true
 			keep[name] = true
 		}
 	}
-	g.Scoped = anyChanged
-	if anyChanged {
+	g.Scoped = len(isChanged) > 0
+	if g.Scoped {
+		// Direct neighbours of changed components only, never neighbours of neighbours.
 		for e := range edges {
-			if keep[e[0]] && nodes[e[1]] != nil && !nodes[e[1]].Vendor {
+			if isChanged[e[0]] && nodes[e[1]] != nil && !nodes[e[1]].Vendor {
 				keep[e[1]] = true
 			}
-			if keep[e[1]] && nodes[e[0]] != nil && !nodes[e[0]].Vendor {
+			if isChanged[e[1]] && nodes[e[0]] != nil && !nodes[e[0]].Vendor {
 				keep[e[0]] = true
 			}
 		}
@@ -374,13 +383,6 @@ func (s *Store) Graph(branch, repo, svc string, window time.Duration, thr Thresh
 			if !n.Vendor {
 				keep[name] = true
 			}
-		}
-	}
-	// Changed nodes always survive the neighbour pass; re-add in case a vendor
-	// parent sat between two changed components.
-	for name, n := range nodes {
-		if n.Changed {
-			keep[name] = true
 		}
 	}
 	hotN := int(float64(thr.HotPer10s) * window.Seconds() / 10)

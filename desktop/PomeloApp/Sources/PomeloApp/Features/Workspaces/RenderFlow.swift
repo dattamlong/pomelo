@@ -136,7 +136,7 @@ final class RenderFlowViewModel: ObservableObject {
     @Published private(set) var summary = RenderSummary()
     @Published private(set) var probes: [RenderProbe] = []
     @Published private(set) var loaded = false
-    @Published var window = 10
+    @Published var window = -1   // -1 = everything since the last clear
     @Published var showVendor = false
     @Published var mode: Mode = .graph
     @Published private(set) var graphs: [String: RenderGraph] = [:]   // target -> graph
@@ -237,7 +237,7 @@ struct RenderFlowView: View {
     private var header: some View {
         HStack(spacing: 10) {
             Text("RENDERS").font(.system(size: 10.5, weight: .semibold)).kerning(0.6).foregroundStyle(Theme.muted)
-            Text("last \(vm.summary.windowS)s").font(Theme.mono(10.5)).foregroundStyle(Theme.dim)
+            Text(vm.summary.windowS < 0 ? "since clear" : "last \(vm.summary.windowS)s").font(Theme.mono(10.5)).foregroundStyle(Theme.dim)
             Spacer()
             Picker("", selection: $vm.mode) {
                 Image(systemName: "point.3.connected.trianglepath.dotted").tag(RenderFlowViewModel.Mode.graph)
@@ -247,8 +247,9 @@ struct RenderFlowView: View {
                 .font(.system(size: 11)).foregroundStyle(Theme.fgMuted)
                 .help("Show components from node_modules (minified names you cannot change)")
             Picker("", selection: $vm.window) {
-                Text("10s").tag(10); Text("30s").tag(30); Text("2m").tag(120)
-            }.pickerStyle(.segmented).frame(width: 150).controlSize(.small)
+                Text("All").tag(-1); Text("10s").tag(10); Text("30s").tag(30); Text("2m").tag(120)
+            }.pickerStyle(.segmented).frame(width: 190).controlSize(.small)
+                .help("All = everything captured since you last cleared; the others are sliding windows")
             Button { Task { await vm.clear(branch: workspace.branch) } } label: {
                 Image(systemName: "trash").font(.system(size: 11))
             }.buttonStyle(.plain).foregroundStyle(Theme.fgMuted).help("Clear captured renders")

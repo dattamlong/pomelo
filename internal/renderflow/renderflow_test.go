@@ -65,6 +65,21 @@ func TestSummaryIsolatesBranchesAndEmitsEmptySlices(t *testing.T) {
 	}
 }
 
+func TestNegativeWindowKeepsEverything(t *testing.T) {
+	s := fixedStore(time.UnixMilli(10_000_000))
+	s.Ingest("a", "r", "w", Batch{Commits: []Commit{{T: 5, Renders: []Render{{Name: "Old", Count: 1}}}}})
+	if got := s.Summary("a", 10*time.Second, DefaultThresholds); got.Targets[0].Commits != 0 {
+		t.Fatal("old commit must fall outside a 10s window")
+	}
+	got := s.Summary("a", -1, DefaultThresholds)
+	if got.WindowS != -1 || got.Targets[0].Commits != 1 {
+		t.Fatalf("all-time: %+v", got)
+	}
+	if g := s.Graph("a", "r", "w", -1, DefaultThresholds, nil); g.Commits != 1 || g.WindowS != -1 {
+		t.Fatalf("graph all-time: %+v", g)
+	}
+}
+
 func TestRingCap(t *testing.T) {
 	s := fixedStore(time.UnixMilli(1))
 	cs := make([]Commit, ringCap+10)
