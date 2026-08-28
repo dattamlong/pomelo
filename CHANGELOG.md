@@ -6,9 +6,6 @@ All notable changes to Pomelo are documented here. The format is based on
 
 ## [Unreleased]
 
-### Changed
-- Jira comments read like Jira: author avatar, full date, threaded replies with a connector line and a collapsible reply count; the comments column is resizable.
-
 ## [0.3.6] - 2026-08-29
 
 ### Added
